@@ -23,6 +23,13 @@ Housing society mobile app for maintenance payments and clubhouse amenity bookin
 - Default seed: `OP001–OP100`, active on startup.
 - Admin can add new series (custom prefix + range) for FY-end. Adding a new series auto-deactivates previous. Admin can also activate any old series.
 
+## UPI Payment (Real, ₹0 fees)
+- **VPA**: `satrwa@icici` · **Payee**: `Sri Anjaneya Township RWA`
+- One-tap deep-links to GPay/PhonePe/Paytm/any UPI app, pre-filled with amount + note (`Maint A-101` / `Gym B-202` etc.)
+- Dynamic UPI QR generated per transaction with amount + note baked in
+- No gateway fees; money goes directly to society's ICICI account
+- Verification workflow: user taps "I have paid" and optionally enters 12-digit UPI Ref No (RRN) → receipt saved as **PENDING**. Committee marks **VERIFIED** in Admin → Today tab.
+
 ## Data / Backend
 - Stack: FastAPI + MongoDB
 - Collections: `flats`, `maintenance_payments`, `amenity_bookings`, `receipt_series`

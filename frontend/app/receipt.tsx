@@ -48,11 +48,17 @@ export default function Receipt() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.successHero}>
-          <View style={styles.tickWrap}>
-            <Ionicons name="checkmark" size={40} color={COLORS.onBrand} />
+          <View style={[styles.tickWrap, !rec.verified && { backgroundColor: COLORS.warningBg, borderColor: COLORS.warning, borderWidth: 2 }]}>
+            <Ionicons name={rec.verified ? "checkmark" : "time-outline"} size={40} color={rec.verified ? COLORS.onBrand : COLORS.warning} />
           </View>
-          <Text style={styles.successTitle}>Payment Successful</Text>
-          <Text style={styles.successSub}>Thank you for your prompt payment</Text>
+          <Text style={styles.successTitle}>
+            {rec.verified ? "Payment Verified" : "Awaiting Verification"}
+          </Text>
+          <Text style={styles.successSub}>
+            {rec.verified
+              ? "Thank you for your prompt payment"
+              : "Committee will verify with bank records and confirm shortly"}
+          </Text>
         </View>
 
         <View style={styles.receiptCard} testID="receipt-card">
@@ -104,6 +110,7 @@ export default function Receipt() {
             </>
           )}
           <Row label="UPI ID" value={rec.upi_id || "—"} />
+          {!!rec.upi_ref_no && <Row label="UPI Ref No" value={rec.upi_ref_no} />}
 
           <View style={styles.dotDivider} />
 
@@ -112,8 +119,10 @@ export default function Receipt() {
             <Text style={styles.totalValue}>₹{Number(rec.total_amount).toLocaleString("en-IN")}</Text>
           </View>
 
-          <View style={styles.stamp}>
-            <Text style={styles.stampText}>PAID</Text>
+          <View style={[styles.stamp, !rec.verified && { borderColor: COLORS.warning }]}>
+            <Text style={[styles.stampText, !rec.verified && { color: COLORS.warning, fontSize: 12, letterSpacing: 2 }]}>
+              {rec.verified ? "PAID" : "PENDING"}
+            </Text>
           </View>
 
           <Text style={styles.footNote}>

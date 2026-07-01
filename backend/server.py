@@ -17,6 +17,8 @@ from reportlab.lib.pagesizes import A5
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
+import qrcode
+from urllib.parse import quote
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -37,6 +39,11 @@ ADMIN_PIN = "1234"
 LATE_FEE_DEFAULT = 50  # ₹ per late month
 DUE_DAY = 15  # after this day of current month, current month is also late
 
+# UPI config (society)
+UPI_VPA = "satrwa@icici"
+UPI_PAYEE_NAME = "Sri Anjaneya Township RWA"
+UPI_MERCHANT_SHORT = "SATRWA"
+
 # ---------------- MODELS ----------------
 class FlatRegister(BaseModel):
     block: str
@@ -55,21 +62,24 @@ class PayMaintenance(BaseModel):
     flat_no: str
     mode: Literal["full", "current_month"]
     include_conveyance: bool = False
-    upi_id: Optional[str] = "user@upi"
+    upi_id: Optional[str] = ""
+    upi_ref_no: Optional[str] = ""
 
 class BookGym(BaseModel):
     block: str
     flat_no: str
     members: int
     booking_date: str
-    upi_id: Optional[str] = "user@upi"
+    upi_id: Optional[str] = ""
+    upi_ref_no: Optional[str] = ""
 
 class BookPool(BaseModel):
     block: str
     flat_no: str
     persons: int
     booking_date: str
-    upi_id: Optional[str] = "user@upi"
+    upi_id: Optional[str] = ""
+    upi_ref_no: Optional[str] = ""
 
 class SeriesCreate(BaseModel):
     prefix: str
@@ -84,6 +94,11 @@ class SeriesActivate(BaseModel):
 class LateFeeUpdate(BaseModel):
     late_fee: int
     pin: str
+
+class VerifyPayment(BaseModel):
+    receipt_no: str
+    pin: str
+    verified: bool = True
 
 # ---------------- HELPERS ----------------
 def month_range(start_ym: str, end_ym: str) -> List[str]:
@@ -168,7 +183,31 @@ async def next_receipt_number() -> str:
     await db.receipt_series.update_one({"id": series["id"]}, {"$set": {"current": current + 1}})
     return receipt_no
 
+def build_upi_url(amount: float, note: str) -> str:
+    """Build UPI intent URL — works with any UPI app."""
+    params = (
+        f"pa={UPI_VPA}"
+        f"&pn={quote(UPI_PAYEE_NAME)}"
+        f"&am={amount:.2f}"
+        f"&cu=INR"
+        f"&tn={quote(note)}"
+        f"&mc=0000"
+    )
+    return f"upi://pay?{params}"
+
 async def ensure_seed():
+    existing = await db.receipt_series.find_one({})
+    if not existing:
+        await db.receipt_series.insert_one({
+            "id": str(uuid.uuid4()),
+            "prefix": "OP",
+            "start": 1,
+            "end": 100,
+            "current": 1,
+            "fy_label": "FY-Initial",
+            "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
     existing = await db.receipt_series.find_one({})
     if not existing:
         await db.receipt_series.insert_one({
@@ -271,7 +310,9 @@ async def pay_maintenance(body: PayMaintenance):
         "late_fee_amount": late_fee_amount,
         "late_months_paid": late_months_paid,
         "total_amount": total,
-        "upi_id": body.upi_id,
+        "upi_id": body.upi_id or "",
+        "upi_ref_no": (body.upi_ref_no or "").strip(),
+        "verified": False,
         "status": "success",
         "paid_at": now_iso,
         "paid_date": today_str(),
@@ -309,7 +350,9 @@ async def book_gym(body: BookGym):
         "rate_per_person": GYM_PER_PERSON,
         "total_amount": total,
         "booking_date": body.booking_date,
-        "upi_id": body.upi_id,
+        "upi_id": body.upi_id or "",
+        "upi_ref_no": (body.upi_ref_no or "").strip(),
+        "verified": False,
         "status": "success",
         "paid_at": datetime.now(timezone.utc).isoformat(),
         "paid_date": today_str(),
@@ -345,7 +388,9 @@ async def book_pool(body: BookPool):
         "persons": body.persons,
         "total_amount": total,
         "booking_date": body.booking_date,
-        "upi_id": body.upi_id,
+        "upi_id": body.upi_id or "",
+        "upi_ref_no": (body.upi_ref_no or "").strip(),
+        "verified": False,
         "status": "success",
         "paid_at": datetime.now(timezone.utc).isoformat(),
         "paid_date": today_str(),
@@ -364,6 +409,32 @@ async def get_tariff():
         "late_fee": await get_late_fee(),
         "due_day": DUE_DAY,
     }
+
+@api_router.get("/upi/info")
+async def upi_info(amount: float, note: str = "Payment"):
+    upi_url = build_upi_url(amount, note)
+    return {
+        "vpa": UPI_VPA,
+        "payee_name": UPI_PAYEE_NAME,
+        "amount": amount,
+        "note": note,
+        "upi_url": upi_url,
+        "gpay_url": "tez://" + upi_url.split("://", 1)[1],
+        "phonepe_url": "phonepe://pay?" + upi_url.split("?", 1)[1],
+        "paytm_url": "paytmmp://pay?" + upi_url.split("?", 1)[1],
+    }
+
+@api_router.get("/upi/qr")
+async def upi_qr(amount: float, note: str = "Payment"):
+    upi_url = build_upi_url(amount, note)
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
+    qr.add_data(upi_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#0A0A0A", back_color="#FFFFFF")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png", headers={"Cache-Control": "no-cache"})
 
 @api_router.get("/history/{block}/{flat_no}")
 async def history(block: str, flat_no: str):
@@ -459,7 +530,9 @@ def _draw_receipt_pdf(rec: dict) -> bytes:
         row("Persons", rec["persons"])
         row("Booking Date", rec["booking_date"])
 
-    row("UPI ID", rec.get("upi_id", "-"))
+    row("UPI ID", rec.get("upi_id") or "-")
+    if rec.get("upi_ref_no"):
+        row("UPI Ref No", rec["upi_ref_no"])
 
     # Total
     y -= 4*mm
@@ -471,14 +544,17 @@ def _draw_receipt_pdf(rec: dict) -> bytes:
     c.setFillColor(gold); c.setFont("Helvetica-Bold", 20)
     c.drawRightString(W - 18*mm, y, f"Rs. {rec['total_amount']:,}")
 
-    # PAID stamp
+    # PAID stamp — green if verified, gold if pending
+    verified = bool(rec.get("verified"))
+    stamp_color = colors.HexColor("#1E7A3E") if verified else colors.HexColor("#B5952F")
+    stamp_text = "PAID" if verified else "PENDING"
     c.saveState()
     c.translate(W - 45*mm, 40*mm); c.rotate(-15)
-    c.setStrokeColor(colors.HexColor("#1E7A3E")); c.setFillColor(colors.HexColor("#1E7A3E"))
+    c.setStrokeColor(stamp_color); c.setFillColor(stamp_color)
     c.setLineWidth(2)
-    c.rect(-15*mm, -6*mm, 30*mm, 12*mm)
-    c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(0, -3*mm, "PAID")
+    c.rect(-18*mm, -6*mm, 36*mm, 12*mm)
+    c.setFont("Helvetica-Bold", 14 if not verified else 18)
+    c.drawCentredString(0, -3*mm, stamp_text)
     c.restoreState()
 
     # Footer
@@ -502,6 +578,18 @@ async def receipt_pdf(receipt_no: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f"inline; filename={receipt_no}.pdf"},
     )
+
+@api_router.post("/admin/verify-payment")
+async def admin_verify_payment(body: VerifyPayment):
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    upd = {"verified": body.verified, "verified_at": datetime.now(timezone.utc).isoformat() if body.verified else None}
+    r1 = await db.maintenance_payments.update_one({"receipt_no": body.receipt_no}, {"$set": upd})
+    if r1.matched_count == 0:
+        r2 = await db.amenity_bookings.update_one({"receipt_no": body.receipt_no}, {"$set": upd})
+        if r2.matched_count == 0:
+            raise HTTPException(404, "Receipt not found")
+    return {"ok": True, "verified": body.verified}
 
 # -------- ADMIN --------
 @api_router.post("/admin/verify")

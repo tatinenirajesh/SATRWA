@@ -211,12 +211,12 @@ export default function Admin() {
             <Text style={styles.sectionLabel}>TODAY&apos;S MAINTENANCE ({todayPayments.maintenance.length})</Text>
             {todayPayments.maintenance.length === 0 && <Text style={styles.emptyText}>No maintenance payments today.</Text>}
             {todayPayments.maintenance.map((p: any) => (
-              <PaymentRow key={p.receipt_no} p={p} router={router} kind="maintenance" />
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="maintenance" pin={pin} onChange={loadAll} />
             ))}
             <Text style={styles.sectionLabel}>TODAY&apos;S AMENITY ({todayPayments.bookings.length})</Text>
             {todayPayments.bookings.length === 0 && <Text style={styles.emptyText}>No amenity bookings today.</Text>}
             {todayPayments.bookings.map((p: any) => (
-              <PaymentRow key={p.receipt_no} p={p} router={router} kind="amenity" />
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="amenity" pin={pin} onChange={loadAll} />
             ))}
           </View>
         )}
@@ -240,11 +240,11 @@ export default function Admin() {
 
             <Text style={styles.sectionLabel}>MAINTENANCE ({allPayments.maintenance.length})</Text>
             {allPayments.maintenance.slice(0, 30).map((p: any) => (
-              <PaymentRow key={p.receipt_no} p={p} router={router} kind="maintenance" />
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="maintenance" pin={pin} onChange={loadAll} />
             ))}
             <Text style={styles.sectionLabel}>AMENITIES ({allPayments.bookings.length})</Text>
             {allPayments.bookings.slice(0, 30).map((p: any) => (
-              <PaymentRow key={p.receipt_no} p={p} router={router} kind="amenity" />
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="amenity" pin={pin} onChange={loadAll} />
             ))}
           </View>
         )}
@@ -341,8 +341,20 @@ function TabBtn({ label, active, onPress, testID }: { label: string; active: boo
   );
 }
 
-function PaymentRow({ p, router, kind }: { p: any; router: any; kind: string }) {
+function PaymentRow({ p, router, kind, pin, onChange }: { p: any; router: any; kind: string; pin: string; onChange: () => void }) {
   const dt = new Date(p.paid_at);
+  const verify = async (e: any) => {
+    e?.stopPropagation?.();
+    try {
+      const r = await fetch(`${API}/admin/verify-payment`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receipt_no: p.receipt_no, pin, verified: !p.verified }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Failed");
+      onChange();
+    } catch (e: any) { Alert.alert("Error", e.message); }
+  };
   return (
     <Pressable
       testID={`pay-row-${p.receipt_no}`}
@@ -350,13 +362,29 @@ function PaymentRow({ p, router, kind }: { p: any; router: any; kind: string }) 
       style={styles.pRow}
     >
       <View style={{ flex: 1 }}>
-        <Text style={styles.pTitle}>{p.receipt_no} · {p.block}-{p.flat_no}{p.owner_name ? ` · ${p.owner_name}` : ""}</Text>
-        <Text style={styles.pSub}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <Text style={styles.pTitle}>{p.receipt_no} · {p.block}-{p.flat_no}</Text>
+          <View style={[styles.statusChip, p.verified ? styles.statusOk : styles.statusWarn]}>
+            <Text style={[styles.statusChipText, { color: p.verified ? COLORS.success : COLORS.warning }]}>
+              {p.verified ? "VERIFIED" : "PENDING"}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.pSub} numberOfLines={1}>
+          {p.owner_name ? `${p.owner_name} · ` : ""}
           {kind === "maintenance" ? `${p.months_count} mo${p.late_fee_amount > 0 ? ` +₹${p.late_fee_amount} late` : ""}` : `${p.type}${p.members ? ` · ${p.members}p` : ""}${p.persons ? ` · ${p.persons}p` : ""}`}
+          {p.upi_ref_no ? ` · Ref ${p.upi_ref_no}` : ""}
           {" · "}{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
         </Text>
       </View>
-      <Text style={styles.pAmt}>₹{Number(p.total_amount).toLocaleString("en-IN")}</Text>
+      <View style={{ alignItems: "flex-end", gap: 4 }}>
+        <Text style={styles.pAmt}>₹{Number(p.total_amount).toLocaleString("en-IN")}</Text>
+        <Pressable testID={`verify-${p.receipt_no}`} onPress={verify} style={[styles.verifyBtn, p.verified && { borderColor: COLORS.muted }]}>
+          <Text style={[styles.verifyBtnText, p.verified && { color: COLORS.muted }]}>
+            {p.verified ? "Undo" : "Verify"}
+          </Text>
+        </Pressable>
+      </View>
     </Pressable>
   );
 }
@@ -410,4 +438,10 @@ const styles = StyleSheet.create({
   pTitle: { color: COLORS.onSurface, fontFamily: FONTS.sans, fontSize: 13 },
   pSub: { color: COLORS.muted, fontSize: 11, marginTop: 2, fontFamily: FONTS.sans },
   pAmt: { fontFamily: FONTS.serif, color: COLORS.brand, fontSize: 15 },
+  statusChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.pill },
+  statusOk: { backgroundColor: COLORS.successBg },
+  statusWarn: { backgroundColor: COLORS.warningBg },
+  statusChipText: { fontSize: 9, letterSpacing: 1, fontWeight: "700", fontFamily: FONTS.sans },
+  verifyBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.brand },
+  verifyBtnText: { color: COLORS.brand, fontSize: 10, fontWeight: "700", fontFamily: FONTS.sans, letterSpacing: 0.5 },
 });
