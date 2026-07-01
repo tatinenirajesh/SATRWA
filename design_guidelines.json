@@ -1,0 +1,196 @@
+{
+  "app_name": "Sri Anjaneya Township (SATRWA)",
+  "personality": "6 Glass / Luxe DARK",
+  "personality_one_liner": "A premium, cinematic, and highly restrained utility experience, using deep matte charcoal and rich metallic gold to exude trust, exclusivity, and elegance.",
+  "color": {
+    "surface": "#0A0A0A",
+    "onSurface": "#F2F2F2",
+    "surfaceSecondary": "#1A1A1A",
+    "onSurfaceSecondary": "#E5E5E5",
+    "surfaceTertiary": "#262626",
+    "onSurfaceTertiary": "#CCCCCC",
+    "surfaceInverse": "#F5F5F5",
+    "onSurfaceInverse": "#0A0A0A",
+    "brand": "#D4AF37",
+    "brandPrimary": "#D4AF37",
+    "onBrandPrimary": "#0A0A0A",
+    "brandSecondary": "#B5952F",
+    "onBrandSecondary": "#0A0A0A",
+    "brandTertiary": "#332A0D",
+    "onBrandTertiary": "#E6C555",
+    "success": "#1E422F",
+    "onSuccess": "#82D9AA",
+    "warning": "#4D3A11",
+    "onWarning": "#F2C94C",
+    "error": "#4A1C1C",
+    "onError": "#E07070",
+    "info": "#1F3347",
+    "onInfo": "#7DB8ED",
+    "border": "#2A2A2A",
+    "borderStrong": "#D4AF37",
+    "divider": "#1F1F1F"
+  },
+  "typography": {
+    "displayFontFamily": "Cormorant Garamond",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Handle spacing correctly dont have extra spaces where its not required, handle padding and margin corectly and subtle for buttons and components. Content should feel spacious and cinematic.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "stack_only",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use glass on headers, bottom sheets, and the background of floating action buttons.",
+      "Pair blur with a translucent tinted base (≥75% of surface) underneath to guarantee contrast.",
+      "Use on premium featured cards sitting over abstract texture imagery."
+    ],
+    "dont's": [
+      "Never apply glass to form fields or body text regions.",
+      "Never rely on blur alone for readability without the darkened base layer."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "A highly refined, password-less entry point validating residency.",
+      "states": {
+        "loading": "Subtle gold spinner centered in dark void.",
+        "empty": "N/A",
+        "error": "Ruby red inline text message."
+      },
+      "layout": "Minimalist single-column layout. Massive 'SATRWA' logo and 'Sri Anjaneya Township' display text in gold serif. Use a grid of refined cards to select Flat Block (A-F), followed by a clean, large typography input for Flat Number. Stick primary CTA at the bottom using safe area."
+    },
+    {
+      "name": "Home / Landing",
+      "purpose": "The digital concierge offering direct paths to Payments and Bookings.",
+      "states": {
+        "loading": "Dark skeleton cards with subtle gold shimmer.",
+        "empty": "N/A",
+        "error": "Error fetching flat data - with a retry gold-bordered button."
+      },
+      "layout": "Welcome header utilizing glassmorphism over subtle background scroll. Two massive hero cards: 'Maintenance Payment' over abstract gold/black texture with glass overlay, and 'Clubhouse Booking' over the pool image. Cards are full width with 'lg' outer margin, featuring large serif titles and thin Phosphor right arrows."
+    },
+    {
+      "name": "Maintenance Payment",
+      "purpose": "Clear breakdown of dues and payment configuration.",
+      "states": {
+        "loading": "Dark skeleton for billing details.",
+        "empty": "A luxurious 'All Clear' illustration - gold tick with text 'No pending dues'.",
+        "error": "Network error with 'Reload' button."
+      },
+      "layout": "Top section features oversized serif typography showing total dues in gold. Segmented control/pills (Pay Full vs Pay One Month) styled with brandTertiary active state. Breakdown rows (e.g., 2 BHK base, Conveyance charge) presented in a surfaceSecondary card separated by 1px 'border'. Sticky gold 'Pay' CTA at the bottom over a glassmorphic gradient bar."
+    },
+    {
+      "name": "Amenity Booking",
+      "purpose": "Showcase premium facilities for booking with a strict dues-gate overlay.",
+      "states": {
+        "loading": "Skeletons for gym/pool cards.",
+        "empty": "No amenities available.",
+        "error": "If dues are pending, the entire screen is locked behind a frosted glass overlay with a deep ruby warning card ('Clear Dues First') and a CTA routing to Maintenance."
+      },
+      "layout": "Vertical list of lush, full-bleed image cards (Gym and Pool) separated by 3xl spacing. Images MUST use a top-to-bottom gradient scrim (transparent to ≥70% surfaceInverse) to guarantee text contrast. Serif titles overlaid at the bottom of the card."
+    },
+    {
+      "name": "Mock UPI Payment",
+      "purpose": "Secure transaction processing simulation.",
+      "states": {
+        "loading": "Simulating payment with a gold pulse animation.",
+        "empty": "N/A",
+        "error": "Transaction failed ruby card."
+      },
+      "layout": "Centered layout on surfaceSecondary. Features a mockup QR code centered inside a gold 'borderStrong' frame. Input field for UPI ID below it. Submit button is sticky at bottom."
+    },
+    {
+      "name": "Receipt View",
+      "purpose": "A premium digital record styled like a luxury certificate.",
+      "states": {
+        "loading": "Generating receipt skeleton...",
+        "empty": "N/A",
+        "error": "Failed to load receipt."
+      },
+      "layout": "Designed like a digital ticket. SurfaceSecondary card with 'borderStrong' thin gold stroke. Dotted divider line separating the header (Receipt # OP001) from the details. Subtle SATRWA watermark in the background. Action buttons for 'Download PDF' and 'Share' at the bottom."
+    },
+    {
+      "name": "Admin / Payment History",
+      "purpose": "Manage receipt series and view past premium transactions.",
+      "states": {
+        "loading": "List skeleton.",
+        "empty": "No transactions recorded.",
+        "error": "Unable to fetch ledger."
+      },
+      "layout": "Structured data view. Functional layout utilizing tight serif headers and clean sans-serif rows for history. A floating action button (FAB) with glass effect to 'Add New Series' for the new FY."
+    }
+  ],
+  "images": {
+    "satrwa_crest_logo": {
+      "url": "https://images.unsplash.com/photo-1647096386728-eb5c50a0e394?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwxfHxnb2xkJTIwY3Jlc3QlMjBsb2dvJTIwYmxhY2slMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc4MjkzMDI3M3ww&ixlib=rb-4.1.0&q=85",
+      "alt": "SATRWA Ornate Gold Crest Logo"
+    },
+    "amenity_pool": {
+      "url": "https://images.unsplash.com/photo-1716801408923-c2149294dad2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBzd2ltbWluZyUyMHBvb2wlMjBuaWdodHxlbnwwfHx8fDE3ODI5MzAyNzN8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Luxury Swimming Pool at Night"
+    },
+    "amenity_gym": {
+      "url": "https://images.unsplash.com/photo-1637430308606-86576d8fef3c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBwcmVtaXVtJTIwZ3ltJTIwZGFya3xlbnwwfHx8fDE3ODI5MzAyNzN8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Modern Premium Dark Gym"
+    },
+    "hero_texture_abstract": {
+      "url": "https://images.unsplash.com/photo-1741356474357-72188f76e801?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGJsYWNrJTIwYW5kJTIwZ29sZCUyMGx1eHVyeSUyMHRleHR1cmV8ZW58MHx8fHwxNzgyOTMwMjczfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract Black and Gold Texture"
+    }
+  },
+  "haptics": {
+    "login_submit": "impactMedium",
+    "home_card_tap": "impactLight",
+    "payment_toggle_select": "selection",
+    "pay_now_submit": "impactHeavy",
+    "amenity_card_tap": "impactLight",
+    "dues_gate_error": "notificationError",
+    "receipt_download": "notificationSuccess"
+  },
+  "instructions_to_main_agent": [
+    "Strict adherence to '6 Glass / Luxe DARK' personality. Use the matte black (#0A0A0A) background to let the gold accents (#D4AF37) breathe.",
+    "No purple, blue, or neon colors under any circumstances. Stick rigidly to the black, charcoal, and gold palette.",
+    "Typography must be respected: Use Cormorant Garamond exclusively for headers, titles, metrics, and branding. Use Geist solely for body text and labels.",
+    "Implement the 'dues gate' visually using a full-screen frosted glass overlay covering the Amenity Booking list. It should feel intentional and un-ignorable without being brutal.",
+    "Receipt Screen must be treated like a premium certificate. Use thin 1px gold borders, dotted divider lines, and heavily rely on serif typography to convey official status.",
+    "Any time text sits on imagery (e.g., Amenity cards), a gradient scrim layer MUST sit between the image and the text (transparent to ≥70% surfaceInverse).",
+    "Ensure 'Pay Now' buttons sit in a safe-area aware sticky footer at the bottom of the screen, floating over content.",
+    "Do NOT use passwords. Follow the problem statement for Flat Block + Flat No login mechanism natively."
+  ]
+}
