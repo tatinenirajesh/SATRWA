@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Linking, Platform } from "react-native";
+import { useState } from "react";
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Linking } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
 
 export default function Admin() {
@@ -13,13 +14,15 @@ export default function Admin() {
   const [loading, setLoading] = useState(false);
 
   const [seriesList, setSeriesList] = useState<any[]>([]);
-  const [payments, setPayments] = useState<{ maintenance: any[]; bookings: any[] }>({ maintenance: [], bookings: [] });
+  const [allPayments, setAllPayments] = useState<any>({ maintenance: [], bookings: [], summary: {} });
+  const [todayPayments, setTodayPayments] = useState<any>({ maintenance: [], bookings: [], summary: {} });
+  const [lateFee, setLateFee] = useState("50");
 
   const [prefix, setPrefix] = useState("OP");
   const [startNum, setStartNum] = useState("101");
   const [endNum, setEndNum] = useState("200");
 
-  const [tab, setTab] = useState<"series" | "payments">("series");
+  const [tab, setTab] = useState<"today" | "all" | "series" | "settings">("today");
 
   const verify = async () => {
     if (!pin.trim()) return;
@@ -39,8 +42,17 @@ export default function Admin() {
   };
 
   const loadAll = async () => {
-    const r1 = await fetch(`${API}/admin/series`); setSeriesList((await r1.json()).series || []);
-    const r2 = await fetch(`${API}/admin/payments`); setPayments(await r2.json());
+    const [r1, r2, r3, r4] = await Promise.all([
+      fetch(`${API}/admin/series`),
+      fetch(`${API}/admin/payments`),
+      fetch(`${API}/admin/payments/today`),
+      fetch(`${API}/admin/late-fee`),
+    ]);
+    setSeriesList((await r1.json()).series || []);
+    setAllPayments(await r2.json());
+    setTodayPayments(await r3.json());
+    const lf = await r4.json();
+    setLateFee(String(lf.late_fee));
   };
 
   const addSeries = async () => {
@@ -75,10 +87,23 @@ export default function Admin() {
     } catch (e: any) { Alert.alert("Error", e.message); }
   };
 
-  const exportExcel = async () => {
-    const url = `${API}/admin/export?pin=${encodeURIComponent(pin)}`;
-    Linking.openURL(url);
+  const saveLateFee = async () => {
+    const v = parseInt(lateFee);
+    if (isNaN(v) || v < 0) return Alert.alert("Invalid", "Enter a valid amount");
+    try {
+      const r = await fetch(`${API}/admin/late-fee`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ late_fee: v, pin }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Failed");
+      Alert.alert("Saved", `Late fee set to ₹${d.late_fee} per month`);
+      loadAll();
+    } catch (e: any) { Alert.alert("Error", e.message); }
   };
+
+  const exportAll = () => Linking.openURL(`${API}/admin/export?pin=${encodeURIComponent(pin)}`);
+  const exportToday = () => Linking.openURL(`${API}/admin/export/today?pin=${encodeURIComponent(pin)}`);
 
   if (!authed) {
     return (
@@ -94,7 +119,7 @@ export default function Admin() {
             </View>
           </SafeAreaView>
         </LinearGradient>
-        <View style={{ padding: SPACING.xl }}>
+        <KeyboardAwareScrollView contentContainerStyle={{ padding: SPACING.xl }} bottomOffset={40}>
           <View style={styles.pinCard}>
             <Ionicons name="shield-checkmark-outline" size={40} color={COLORS.brand} />
             <Text style={styles.pinTitle}>Admin Access</Text>
@@ -108,6 +133,8 @@ export default function Admin() {
               secureTextEntry
               keyboardType="number-pad"
               style={styles.input}
+              returnKeyType="done"
+              onSubmitEditing={verify}
             />
             <Pressable testID="admin-verify-btn" onPress={verify} style={styles.primaryBtn} disabled={loading}>
               {loading ? <ActivityIndicator color={COLORS.onBrand} /> : (
@@ -116,12 +143,15 @@ export default function Admin() {
             </Pressable>
             <Text style={styles.pinHint}>Default PIN: 1234 (change on backend)</Text>
           </View>
-        </View>
+        </KeyboardAwareScrollView>
       </View>
     );
   }
 
   const active = seriesList.find(s => s.active);
+  const todaySummary = todayPayments.summary || {};
+  const allSummary = allPayments.summary || {};
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={["#1a1508", "#0A0A0A"]} style={styles.headerGrad}>
@@ -131,23 +161,94 @@ export default function Admin() {
               <Ionicons name="chevron-back" size={22} color={COLORS.brand} />
             </Pressable>
             <Text style={styles.headerTitle}>Admin Panel</Text>
-            <Pressable testID="export-btn" onPress={exportExcel} style={styles.iconBtn}>
-              <Ionicons name="download-outline" size={20} color={COLORS.brand} />
+            <Pressable testID="refresh-btn" onPress={loadAll} style={styles.iconBtn}>
+              <Ionicons name="refresh" size={18} color={COLORS.brand} />
             </Pressable>
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      <View style={styles.tabs}>
-        <Pressable testID="series-tab" onPress={() => setTab("series")} style={[styles.tab, tab === "series" && styles.tabActive]}>
-          <Text style={[styles.tabText, tab === "series" && styles.tabTextActive]}>Receipt Series</Text>
-        </Pressable>
-        <Pressable testID="payments-tab" onPress={() => setTab("payments")} style={[styles.tab, tab === "payments" && styles.tabActive]}>
-          <Text style={[styles.tabText, tab === "payments" && styles.tabTextActive]}>All Payments</Text>
-        </Pressable>
+      <View style={styles.tabsScroll}>
+        <View style={styles.tabs}>
+          <TabBtn label="Today" active={tab === "today"} onPress={() => setTab("today")} testID="today-tab" />
+          <TabBtn label="All" active={tab === "all"} onPress={() => setTab("all")} testID="all-tab" />
+          <TabBtn label="Series" active={tab === "series"} onPress={() => setTab("series")} testID="series-tab" />
+          <TabBtn label="Settings" active={tab === "settings"} onPress={() => setTab("settings")} testID="settings-tab" />
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: SPACING.xl, paddingBottom: 60 }}>
+      <KeyboardAwareScrollView contentContainerStyle={{ padding: SPACING.xl, paddingBottom: 60 }} bottomOffset={40}>
+        {tab === "today" && (
+          <View testID="today-panel">
+            <View style={styles.statsCard}>
+              <View style={styles.statCol}>
+                <Text style={styles.statLabel}>COLLECTED TODAY</Text>
+                <Text style={styles.statBig}>₹{Number(todaySummary.grand_total || 0).toLocaleString("en-IN")}</Text>
+              </View>
+              <View style={styles.statSplit}>
+                <View>
+                  <Text style={styles.statSubLabel}>Maintenance</Text>
+                  <Text style={styles.statSubAmt}>
+                    ₹{Number(todaySummary.maintenance_total || 0).toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={styles.statSubHint}>{todaySummary.maintenance_count || 0} txn</Text>
+                </View>
+                <View>
+                  <Text style={styles.statSubLabel}>Amenity</Text>
+                  <Text style={styles.statSubAmt}>
+                    ₹{Number(todaySummary.bookings_total || 0).toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={styles.statSubHint}>{todaySummary.bookings_count || 0} txn</Text>
+                </View>
+              </View>
+            </View>
+
+            <Pressable testID="download-today-btn" onPress={exportToday} style={styles.exportBtn}>
+              <Ionicons name="download-outline" size={16} color={COLORS.onBrand} />
+              <Text style={styles.exportBtnText}>Download Today&apos;s Excel</Text>
+            </Pressable>
+
+            <Text style={styles.sectionLabel}>TODAY&apos;S MAINTENANCE ({todayPayments.maintenance.length})</Text>
+            {todayPayments.maintenance.length === 0 && <Text style={styles.emptyText}>No maintenance payments today.</Text>}
+            {todayPayments.maintenance.map((p: any) => (
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="maintenance" />
+            ))}
+            <Text style={styles.sectionLabel}>TODAY&apos;S AMENITY ({todayPayments.bookings.length})</Text>
+            {todayPayments.bookings.length === 0 && <Text style={styles.emptyText}>No amenity bookings today.</Text>}
+            {todayPayments.bookings.map((p: any) => (
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="amenity" />
+            ))}
+          </View>
+        )}
+
+        {tab === "all" && (
+          <View testID="all-panel">
+            <View style={styles.statsCard}>
+              <View style={styles.statCol}>
+                <Text style={styles.statLabel}>TOTAL COLLECTED</Text>
+                <Text style={styles.statBig}>₹{Number(allSummary.grand_total || 0).toLocaleString("en-IN")}</Text>
+                <Text style={styles.statSubHint}>
+                  {(allSummary.maintenance_count || 0) + (allSummary.bookings_count || 0)} transactions
+                </Text>
+              </View>
+            </View>
+
+            <Pressable testID="download-all-btn" onPress={exportAll} style={styles.exportBtn}>
+              <Ionicons name="download-outline" size={16} color={COLORS.onBrand} />
+              <Text style={styles.exportBtnText}>Download All Excel</Text>
+            </Pressable>
+
+            <Text style={styles.sectionLabel}>MAINTENANCE ({allPayments.maintenance.length})</Text>
+            {allPayments.maintenance.slice(0, 30).map((p: any) => (
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="maintenance" />
+            ))}
+            <Text style={styles.sectionLabel}>AMENITIES ({allPayments.bookings.length})</Text>
+            {allPayments.bookings.slice(0, 30).map((p: any) => (
+              <PaymentRow key={p.receipt_no} p={p} router={router} kind="amenity" />
+            ))}
+          </View>
+        )}
+
         {tab === "series" && (
           <>
             {active && (
@@ -205,32 +306,58 @@ export default function Admin() {
           </>
         )}
 
-        {tab === "payments" && (
+        {tab === "settings" && (
           <>
-            <Text style={styles.sectionLabel}>MAINTENANCE ({payments.maintenance.length})</Text>
-            {payments.maintenance.map(p => (
-              <Pressable key={p.receipt_no} onPress={() => router.push({ pathname: "/receipt", params: { no: p.receipt_no } })} style={styles.pRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.pTitle}>{p.receipt_no} · Block {p.block}-{p.flat_no}</Text>
-                  <Text style={styles.pSub}>{p.months_count} mo · {new Date(p.paid_at).toLocaleDateString("en-IN")}</Text>
-                </View>
-                <Text style={styles.pAmt}>₹{Number(p.total_amount).toLocaleString("en-IN")}</Text>
+            <Text style={styles.sectionLabel}>LATE FEE (per late month)</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.formLabel}>Amount in ₹</Text>
+              <TextInput
+                testID="late-fee-input"
+                value={lateFee}
+                onChangeText={setLateFee}
+                keyboardType="number-pad"
+                style={styles.input}
+                returnKeyType="done"
+              />
+              <Text style={styles.pinHint}>
+                Applied when a member pays after {15}th of the due month.
+              </Text>
+              <Pressable testID="save-late-fee-btn" onPress={saveLateFee} style={styles.primaryBtn}>
+                <Text style={styles.primaryBtnText}>Save Late Fee</Text>
               </Pressable>
-            ))}
-            <Text style={styles.sectionLabel}>AMENITIES ({payments.bookings.length})</Text>
-            {payments.bookings.map(p => (
-              <Pressable key={p.receipt_no} onPress={() => router.push({ pathname: "/receipt", params: { no: p.receipt_no } })} style={styles.pRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.pTitle}>{p.receipt_no} · {p.type.toUpperCase()} · {p.block}-{p.flat_no}</Text>
-                  <Text style={styles.pSub}>{p.booking_date}</Text>
-                </View>
-                <Text style={styles.pAmt}>₹{Number(p.total_amount).toLocaleString("en-IN")}</Text>
-              </Pressable>
-            ))}
+            </View>
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
+  );
+}
+
+function TabBtn({ label, active, onPress, testID }: { label: string; active: boolean; onPress: () => void; testID: string }) {
+  return (
+    <Pressable testID={testID} onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PaymentRow({ p, router, kind }: { p: any; router: any; kind: string }) {
+  const dt = new Date(p.paid_at);
+  return (
+    <Pressable
+      testID={`pay-row-${p.receipt_no}`}
+      onPress={() => router.push({ pathname: "/receipt", params: { no: p.receipt_no } })}
+      style={styles.pRow}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={styles.pTitle}>{p.receipt_no} · {p.block}-{p.flat_no}{p.owner_name ? ` · ${p.owner_name}` : ""}</Text>
+        <Text style={styles.pSub}>
+          {kind === "maintenance" ? `${p.months_count} mo${p.late_fee_amount > 0 ? ` +₹${p.late_fee_amount} late` : ""}` : `${p.type}${p.members ? ` · ${p.members}p` : ""}${p.persons ? ` · ${p.persons}p` : ""}`}
+          {" · "}{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+        </Text>
+      </View>
+      <Text style={styles.pAmt}>₹{Number(p.total_amount).toLocaleString("en-IN")}</Text>
+    </Pressable>
   );
 }
 
@@ -244,20 +371,32 @@ const styles = StyleSheet.create({
   pinTitle: { fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 24, marginTop: SPACING.md },
   pinSub: { color: COLORS.muted, fontSize: 12, marginTop: 4, fontFamily: FONTS.sans, marginBottom: SPACING.xl },
   pinHint: { color: COLORS.muted, fontSize: 11, marginTop: SPACING.md, fontFamily: FONTS.sans, fontStyle: "italic" },
-  input: { height: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, color: COLORS.onSurface, fontSize: 16, paddingHorizontal: SPACING.lg, fontFamily: FONTS.sans, minWidth: 200, textAlign: "center" as const, letterSpacing: 4 },
+  input: { height: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, color: COLORS.onSurface, fontSize: 16, paddingHorizontal: SPACING.lg, fontFamily: FONTS.sans },
   primaryBtn: { marginTop: SPACING.lg, height: 48, paddingHorizontal: SPACING.xl, borderRadius: RADIUS.md, backgroundColor: COLORS.brand, justifyContent: "center", alignItems: "center", alignSelf: "stretch" },
   primaryBtnText: { color: COLORS.onBrand, fontWeight: "700", fontFamily: FONTS.sans },
-  tabs: { flexDirection: "row", paddingHorizontal: SPACING.xl, paddingTop: SPACING.md, gap: SPACING.sm },
-  tab: { flex: 1, height: 40, borderRadius: RADIUS.pill, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border },
-  tabActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
-  tabText: { color: COLORS.onSurfaceTertiary, fontSize: 12, fontFamily: FONTS.sans, letterSpacing: 1 },
+  tabsScroll: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.md },
+  tabs: { flexDirection: "row", gap: SPACING.sm, backgroundColor: COLORS.surfaceSecondary, padding: 4, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border },
+  tab: { flex: 1, height: 34, borderRadius: RADIUS.pill, justifyContent: "center", alignItems: "center" },
+  tabActive: { backgroundColor: COLORS.brand },
+  tabText: { color: COLORS.onSurfaceTertiary, fontSize: 12, fontFamily: FONTS.sans },
   tabTextActive: { color: COLORS.onBrand, fontWeight: "700" },
+  statsCard: { backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.brand, padding: SPACING.xl, marginBottom: SPACING.lg },
+  statCol: { alignItems: "flex-start" },
+  statLabel: { color: COLORS.muted, fontSize: 11, letterSpacing: 2, fontFamily: FONTS.sans },
+  statBig: { fontFamily: FONTS.serif, color: COLORS.brand, fontSize: 40, marginTop: 4 },
+  statSubLabel: { color: COLORS.muted, fontSize: 10, letterSpacing: 1, fontFamily: FONTS.sans },
+  statSubAmt: { color: COLORS.onSurface, fontSize: 18, fontFamily: FONTS.serif, marginTop: 2 },
+  statSubHint: { color: COLORS.muted, fontSize: 11, marginTop: 2, fontFamily: FONTS.sans },
+  statSplit: { flexDirection: "row", justifyContent: "space-between", marginTop: SPACING.lg, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
+  exportBtn: { height: 44, borderRadius: RADIUS.md, backgroundColor: COLORS.brand, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: SPACING.sm },
+  exportBtnText: { color: COLORS.onBrand, fontWeight: "700", fontSize: 14, fontFamily: FONTS.sans },
   activeCard: { backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.brand, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: "center", marginBottom: SPACING.xl },
   activeLabel: { color: COLORS.muted, fontSize: 11, letterSpacing: 2, fontFamily: FONTS.sans },
   activePrefix: { fontFamily: FONTS.serif, color: COLORS.brand, fontSize: 44, marginTop: 4 },
   activeRange: { color: COLORS.onSurface, fontSize: 15, fontFamily: FONTS.serif, marginTop: 4 },
   activeSub: { color: COLORS.muted, fontSize: 12, marginTop: 4, fontFamily: FONTS.sans },
   sectionLabel: { color: COLORS.muted, fontSize: 11, letterSpacing: 2, fontFamily: FONTS.sans, marginTop: SPACING.xl, marginBottom: SPACING.md },
+  emptyText: { color: COLORS.muted, fontSize: 13, fontStyle: "italic", fontFamily: FONTS.sans, textAlign: "center", padding: SPACING.md },
   formCard: { backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
   formLabel: { color: COLORS.muted, fontSize: 11, letterSpacing: 1, fontFamily: FONTS.sans, marginBottom: SPACING.sm },
   seriesRow: { flexDirection: "row", alignItems: "center", padding: SPACING.md, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, marginBottom: SPACING.sm },

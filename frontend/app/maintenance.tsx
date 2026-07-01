@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,7 +12,7 @@ export default function Maintenance() {
   const [session, setSession] = useState<Session | null>(null);
   const [dues, setDues] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<"full" | "one_month">("full");
+  const [mode, setMode] = useState<"full" | "current_month">("full");
   const [includeConveyance, setIncludeConveyance] = useState(false);
 
   const load = useCallback(async () => {
@@ -23,7 +23,7 @@ export default function Maintenance() {
     const d = await r.json();
     setDues(d.dues);
     setLoading(false);
-  }, []);
+  }, [router]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -31,12 +31,21 @@ export default function Maintenance() {
     return <View style={styles.center}><ActivityIndicator color={COLORS.brand} size="large" /></View>;
   }
 
-  const pending = dues.pending_count;
-  const rate = dues.rate;
-  const monthsToPay = mode === "full" ? pending : Math.min(1, pending);
-  const maint = monthsToPay * rate;
+  const pending: string[] = dues.pending_months;
+  const lateMonths: string[] = dues.late_months;
+  const rate: number = dues.rate;
+  const lateFeePerMonth: number = dues.late_fee_per_month;
+  const currentMonth: string = dues.current_month;
+  const currentMonthPending: boolean = dues.current_month_pending;
+
+  const monthsToPay = mode === "full" ? pending
+    : (currentMonthPending ? [currentMonth] : []);
+  const lateMonthsPaid = monthsToPay.filter(m => lateMonths.includes(m));
+
+  const maint = monthsToPay.length * rate;
+  const lateFee = lateMonthsPaid.length * lateFeePerMonth;
   const conveyance = includeConveyance ? 250 : 0;
-  const total = maint + conveyance;
+  const total = maint + conveyance + lateFee;
   const canPay = total > 0;
 
   const proceed = () => {
@@ -66,15 +75,30 @@ export default function Maintenance() {
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.totalLabel}>TOTAL DUE</Text>
+        <Text style={styles.totalLabel}>TOTAL DUE (incl. late fee)</Text>
         <Text style={styles.totalAmt} testID="total-due-amount">
           ₹{dues.total_due.toLocaleString("en-IN")}
         </Text>
         <Text style={styles.totalSub}>
-          {pending} pending month{pending === 1 ? "" : "s"} · {session.bhk_type} · ₹{rate}/mo
+          {pending.length} pending month{pending.length === 1 ? "" : "s"} · {session.bhk_type} · ₹{rate}/mo
         </Text>
 
-        {pending === 0 ? (
+        {dues.late_count > 0 && (
+          <View style={styles.warnCard} testID="late-fee-notice">
+            <Ionicons name="warning-outline" size={18} color={COLORS.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warnTitle}>
+                Late Fee: ₹{dues.late_fee_total.toLocaleString("en-IN")}
+              </Text>
+              <Text style={styles.warnSub}>
+                {dues.late_count} late month{dues.late_count === 1 ? "" : "s"} × ₹{lateFeePerMonth}
+                {" · "}Due by {dues.due_day}th of each month
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {pending.length === 0 ? (
           <View style={styles.clearCard}>
             <Ionicons name="checkmark-circle" size={40} color={COLORS.success} />
             <Text style={styles.clearTitle}>All Dues Cleared</Text>
@@ -89,27 +113,36 @@ export default function Maintenance() {
                 onPress={() => setMode("full")}
                 style={[styles.segBtn, mode === "full" && styles.segBtnActive]}
               >
-                <Text style={[styles.segText, mode === "full" && styles.segTextActive]}>Pay Full</Text>
+                <Text style={[styles.segText, mode === "full" && styles.segTextActive]}>
+                  Pay All Pending
+                </Text>
                 <Text style={[styles.segAmt, mode === "full" && styles.segAmtActive]}>
-                  ₹{(pending * rate).toLocaleString("en-IN")}
+                  {pending.length} month{pending.length > 1 ? "s" : ""}
                 </Text>
               </Pressable>
               <Pressable
-                testID="pay-one-tab"
-                onPress={() => setMode("one_month")}
-                style={[styles.segBtn, mode === "one_month" && styles.segBtnActive]}
+                testID="pay-current-tab"
+                onPress={() => setMode("current_month")}
+                disabled={!currentMonthPending}
+                style={[
+                  styles.segBtn,
+                  mode === "current_month" && styles.segBtnActive,
+                  !currentMonthPending && { opacity: 0.4 },
+                ]}
               >
-                <Text style={[styles.segText, mode === "one_month" && styles.segTextActive]}>One Month</Text>
-                <Text style={[styles.segAmt, mode === "one_month" && styles.segAmtActive]}>
-                  ₹{rate.toLocaleString("en-IN")}
+                <Text style={[styles.segText, mode === "current_month" && styles.segTextActive]}>
+                  Current Month
+                </Text>
+                <Text style={[styles.segAmt, mode === "current_month" && styles.segAmtActive]}>
+                  {currentMonthPending ? currentMonth : "Paid"}
                 </Text>
               </Pressable>
             </View>
 
             <Text style={styles.hint}>
-              {mode === "one_month"
-                ? `Adjusts oldest pending month: ${dues.pending_months[0]}`
-                : `Covers ${pending} month${pending > 1 ? "s" : ""} from ${dues.pending_months[0]} to ${dues.pending_months[dues.pending_months.length - 1]}`}
+              {mode === "current_month" && currentMonthPending
+                ? `Pays only ${currentMonth} (current month). Older dues remain.`
+                : `Covers ${pending.length} month${pending.length > 1 ? "s" : ""} from ${pending[0]} to ${pending[pending.length - 1]}.`}
             </Text>
           </>
         )}
@@ -134,7 +167,12 @@ export default function Maintenance() {
 
         <Text style={styles.sectionLabel}>SUMMARY</Text>
         <View style={styles.summaryCard}>
-          <SummaryRow label={`Maintenance × ${monthsToPay}`} value={`₹${maint.toLocaleString("en-IN")}`} />
+          <SummaryRow label={`Maintenance × ${monthsToPay.length}`} value={`₹${maint.toLocaleString("en-IN")}`} />
+          <View style={styles.divider} />
+          <SummaryRow
+            label={`Late Fee × ${lateMonthsPaid.length}`}
+            value={`₹${lateFee.toLocaleString("en-IN")}`}
+          />
           <View style={styles.divider} />
           <SummaryRow label="Conveyance" value={`₹${conveyance.toLocaleString("en-IN")}`} />
           <View style={styles.divider} />
@@ -179,6 +217,9 @@ const styles = StyleSheet.create({
   totalLabel: { color: COLORS.muted, fontSize: 11, letterSpacing: 2, fontFamily: FONTS.sans },
   totalAmt: { fontFamily: FONTS.serif, color: COLORS.brand, fontSize: 56, marginTop: 4 },
   totalSub: { color: COLORS.onSurfaceTertiary, fontSize: 13, marginTop: 2, fontFamily: FONTS.sans },
+  warnCard: { marginTop: SPACING.lg, flexDirection: "row", alignItems: "flex-start", gap: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.warningBg, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning },
+  warnTitle: { color: COLORS.warning, fontSize: 14, fontWeight: "700", fontFamily: FONTS.sans },
+  warnSub: { color: COLORS.onSurfaceTertiary, fontSize: 12, marginTop: 2, fontFamily: FONTS.sans },
   sectionLabel: { color: COLORS.muted, fontSize: 11, letterSpacing: 2, fontFamily: FONTS.sans, marginTop: SPACING.xxl, marginBottom: SPACING.sm },
   segment: { flexDirection: "row", backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, padding: 4, borderWidth: 1, borderColor: COLORS.border },
   segBtn: { flex: 1, height: 64, borderRadius: RADIUS.sm, justifyContent: "center", alignItems: "center" },

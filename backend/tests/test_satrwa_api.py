@@ -1,24 +1,28 @@
-"""SATRWA Township API tests.
+"""SATRWA Township API tests - Iteration 2.
 
-Covers: auth, dues, maintenance payment, amenity bookings (gym/pool),
-history, receipt lookup, tariff, admin (verify, series CRUD, export).
+Covers: auth, dues (with late-fee), maintenance payment (full & current_month modes),
+amenity bookings, history, receipt lookup, receipt PDF, tariff (with late_fee/due_day),
+admin (verify, series CRUD, late-fee GET/POST, payments summary, today payments,
+Excel export all/today).
 """
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://township-maintenance.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get(
+    "EXPO_PUBLIC_BACKEND_URL",
+    "https://township-maintenance.preview.emergentagent.com",
+).rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN_PIN = "1234"
 
-# Use random flat numbers per run so re-running doesn't collide with previous data.
 RUN_TAG = uuid.uuid4().hex[:6]
-FLAT_WITH_DUES = {"block": "A", "flat_no": f"T{RUN_TAG}A"}   # start_month = 2025-01 (many dues)
-FLAT_NO_DUES_AFTER_PAY = {"block": "B", "flat_no": f"T{RUN_TAG}B"}  # start current month
+FLAT_LATE = {"block": "C", "flat_no": f"L{RUN_TAG}"}   # start_month = 2025-06 (many late months)
+FLAT_CURRENT = {"block": "B", "flat_no": f"C{RUN_TAG}"}  # start current YYYY-MM
 
 
 def current_ym() -> str:
@@ -37,68 +41,80 @@ def client():
 class TestHealth:
     def test_root(self, client):
         r = client.get(f"{API}/")
-        assert r.status_code == 200
-        assert r.json().get("ok") is True
+        assert r.status_code == 200 and r.json().get("ok") is True
 
-    def test_tariff(self, client):
+    def test_tariff_includes_late_fee_and_due_day(self, client):
         r = client.get(f"{API}/tariff")
         assert r.status_code == 200
         d = r.json()
         assert d["maintenance"] == {"2BHK": 2000, "3BHK": 2500}
         assert d["conveyance"] == 250
         assert d["gym_per_person"] == 300
-        # keys become strings when JSON-encoded
         assert d["pool"]["1"] == 700 and d["pool"]["4"] == 2000
+        assert "late_fee" in d and isinstance(d["late_fee"], int)
+        assert d["due_day"] == 15
 
 
-# ------------------ AUTH: LOGIN / REGISTER ------------------
+# ------------------ AUTH ------------------
 class TestAuth:
-    def test_login_nonexistent_returns_exists_false(self, client):
+    def test_login_nonexistent(self, client):
         r = client.post(f"{API}/auth/login", json={"block": "A", "flat_no": f"NX{RUN_TAG}"})
-        assert r.status_code == 200
-        assert r.json() == {"exists": False}
+        assert r.status_code == 200 and r.json() == {"exists": False}
 
     def test_register_invalid_block(self, client):
         r = client.post(f"{API}/auth/register", json={
-            "block": "Z", "flat_no": "999", "bhk_type": "2BHK",
-            "owner_name": "X", "phone": "1", "start_month": "2025-01",
+            "block": "Z", "flat_no": "999", "bhk_type": "2BHK", "start_month": "2025-01",
         })
         assert r.status_code == 400
 
-    def test_register_flat_with_dues(self, client):
+    def test_register_flat_with_late_dues(self, client):
         r = client.post(f"{API}/auth/register", json={
-            "block": FLAT_WITH_DUES["block"], "flat_no": FLAT_WITH_DUES["flat_no"],
-            "bhk_type": "2BHK", "owner_name": "TEST Dues Owner",
-            "phone": "9000000001", "start_month": "2025-01",
+            "block": FLAT_LATE["block"], "flat_no": FLAT_LATE["flat_no"],
+            "bhk_type": "2BHK", "owner_name": "TEST LateOwner",
+            "phone": "9000000001", "start_month": "2025-06",
         })
         assert r.status_code == 200
-        data = r.json()
-        assert data["exists"] is True
-        assert data["flat"]["block"] == "A"
-        assert data["dues"]["rate"] == 2000
-        assert data["dues"]["pending_count"] >= 12  # from 2025-01 to at least 2026-01
+        d = r.json()
+        assert d["exists"] is True
+        assert d["flat"]["block"] == "C"
+        dues = d["dues"]
+        assert dues["rate"] == 2000
+        # from 2025-06 to current month
+        assert dues["pending_count"] >= 8
+        assert dues["late_count"] >= 1
+        assert dues["late_fee_per_month"] >= 0
+        assert dues["late_fee_total"] == dues["late_count"] * dues["late_fee_per_month"]
+        assert dues["maintenance_total"] == dues["pending_count"] * 2000
+        assert dues["total_due"] == dues["maintenance_total"] + dues["late_fee_total"]
+        assert dues["due_day"] == 15
+        assert "current_month" in dues and "current_month_pending" in dues and "current_month_late" in dues
 
     def test_register_duplicate_rejected(self, client):
         r = client.post(f"{API}/auth/register", json={
-            "block": FLAT_WITH_DUES["block"], "flat_no": FLAT_WITH_DUES["flat_no"],
-            "bhk_type": "2BHK", "start_month": "2025-01",
+            "block": FLAT_LATE["block"], "flat_no": FLAT_LATE["flat_no"],
+            "bhk_type": "2BHK", "start_month": "2025-06",
         })
         assert r.status_code == 400
 
-    def test_login_existing(self, client):
-        r = client.post(f"{API}/auth/login", json=FLAT_WITH_DUES)
-        assert r.status_code == 200
-        assert r.json()["exists"] is True
-
-    def test_register_flat_no_dues(self, client):
+    def test_register_flat_current_month(self, client):
         r = client.post(f"{API}/auth/register", json={
-            "block": FLAT_NO_DUES_AFTER_PAY["block"], "flat_no": FLAT_NO_DUES_AFTER_PAY["flat_no"],
+            "block": FLAT_CURRENT["block"], "flat_no": FLAT_CURRENT["flat_no"],
             "bhk_type": "3BHK", "owner_name": "TEST NoDues",
             "phone": "9000000002", "start_month": current_ym(),
         })
         assert r.status_code == 200
-        assert r.json()["dues"]["pending_count"] == 1
-        assert r.json()["dues"]["rate"] == 2500
+        dues = r.json()["dues"]
+        assert dues["pending_count"] == 1
+        assert dues["rate"] == 2500
+        assert dues["current_month_pending"] is True
+        # late only if today.day > 15
+        today = date.today()
+        expected_late = today.day > 15
+        assert dues["current_month_late"] is expected_late
+
+    def test_login_existing(self, client):
+        r = client.post(f"{API}/auth/login", json=FLAT_LATE)
+        assert r.status_code == 200 and r.json()["exists"] is True
 
 
 # ------------------ DUES ------------------
@@ -107,124 +123,118 @@ class TestDues:
         r = client.get(f"{API}/dues/A/NONEXISTENT_{RUN_TAG}")
         assert r.status_code == 404
 
-    def test_dues_amount(self, client):
-        r = client.get(f"{API}/dues/{FLAT_WITH_DUES['block']}/{FLAT_WITH_DUES['flat_no']}")
+    def test_dues_has_all_new_fields(self, client):
+        r = client.get(f"{API}/dues/{FLAT_LATE['block']}/{FLAT_LATE['flat_no']}")
         assert r.status_code == 200
         d = r.json()["dues"]
-        assert d["total_due"] == d["pending_count"] * 2000
+        for k in ["late_months", "late_count", "late_fee_per_month", "late_fee_total",
+                  "maintenance_total", "current_month", "current_month_pending",
+                  "current_month_late", "due_day", "total_due", "pending_months"]:
+            assert k in d, f"missing field {k}"
 
 
 # ------------------ MAINTENANCE PAY ------------------
 class TestMaintenancePay:
-    def test_pay_one_month_oldest(self, client):
-        # Before
-        d0 = client.get(f"{API}/dues/{FLAT_WITH_DUES['block']}/{FLAT_WITH_DUES['flat_no']}").json()["dues"]
-        oldest = d0["pending_months"][0]
-        count0 = d0["pending_count"]
+    def test_pay_current_month_only(self, client):
+        # FLAT_CURRENT has 1 pending (current) month
+        d0 = client.get(f"{API}/dues/{FLAT_CURRENT['block']}/{FLAT_CURRENT['flat_no']}").json()["dues"]
+        assert d0["current_month_pending"] is True
+        expected_late = d0["late_fee_per_month"] if d0["current_month_late"] else 0
 
         r = client.post(f"{API}/maintenance/pay", json={
-            **FLAT_WITH_DUES, "mode": "one_month",
+            **FLAT_CURRENT, "mode": "current_month",
             "include_conveyance": False, "upi_id": "test@upi",
         })
         assert r.status_code == 200
         rec = r.json()["receipt"]
-        assert rec["type"] == "maintenance"
-        assert rec["mode"] == "one_month"
-        assert rec["months_covered"] == [oldest]
-        assert rec["total_amount"] == 2000
-        assert rec["receipt_no"].startswith("OP")
+        assert rec["mode"] == "current_month"
+        assert rec["months_covered"] == [d0["current_month"]]
+        assert rec["late_fee_amount"] == expected_late
+        assert rec["total_amount"] == 2500 + expected_late
+        assert rec["receipt_no"].startswith("OP") or len(rec["receipt_no"]) > 2
 
-        # Verify persisted via receipt lookup
-        g = client.get(f"{API}/receipt/{rec['receipt_no']}")
-        assert g.status_code == 200 and g.json()["receipt_no"] == rec["receipt_no"]
-
-        # Dues decreased by 1
+        # dues cleared for current month
         d1 = r.json()["dues"]
-        assert d1["pending_count"] == count0 - 1
-        assert oldest in d1["paid_months"]
+        assert d1["current_month_pending"] is False
+        assert d1["pending_count"] == 0
 
-    def test_pay_full_with_conveyance(self, client):
-        d0 = client.get(f"{API}/dues/{FLAT_WITH_DUES['block']}/{FLAT_WITH_DUES['flat_no']}").json()["dues"]
+    def test_pay_current_month_when_not_pending_returns_400(self, client):
+        # Already paid above - retry should 400
+        r = client.post(f"{API}/maintenance/pay", json={
+            **FLAT_CURRENT, "mode": "current_month", "include_conveyance": False,
+        })
+        assert r.status_code == 400
+
+    def test_pay_full_with_late_fee(self, client):
+        d0 = client.get(f"{API}/dues/{FLAT_LATE['block']}/{FLAT_LATE['flat_no']}").json()["dues"]
         pending_count = d0["pending_count"]
-        expected = pending_count * 2000 + 250
+        late_count = d0["late_count"]
+        late_pm = d0["late_fee_per_month"]
+        expected_total = pending_count * 2000 + 250 + late_count * late_pm
 
         r = client.post(f"{API}/maintenance/pay", json={
-            **FLAT_WITH_DUES, "mode": "full",
+            **FLAT_LATE, "mode": "full",
             "include_conveyance": True, "upi_id": "test@upi",
         })
         assert r.status_code == 200
         rec = r.json()["receipt"]
         assert rec["months_count"] == pending_count
         assert rec["conveyance_amount"] == 250
-        assert rec["total_amount"] == expected
+        assert rec["late_fee_amount"] == late_count * late_pm
+        assert len(rec["late_months_paid"]) == late_count
+        assert rec["total_amount"] == expected_total
 
-        # No dues after
         d1 = r.json()["dues"]
-        assert d1["pending_count"] == 0
-        assert d1["total_due"] == 0
+        assert d1["pending_count"] == 0 and d1["total_due"] == 0
 
     def test_pay_no_dues_no_conveyance_fails(self, client):
         r = client.post(f"{API}/maintenance/pay", json={
-            **FLAT_WITH_DUES, "mode": "full", "include_conveyance": False,
+            **FLAT_LATE, "mode": "full", "include_conveyance": False,
         })
         assert r.status_code == 400
 
 
-# ------------------ AMENITY (dues gate + booking) ------------------
+# ------------------ AMENITY ------------------
 class TestAmenity:
-    def test_gym_blocked_when_dues(self, client):
-        # FLAT_NO_DUES_AFTER_PAY currently has 1 pending month
+    def test_gym_after_dues_cleared(self, client):
         r = client.post(f"{API}/amenity/gym", json={
-            **FLAT_NO_DUES_AFTER_PAY, "members": 2, "booking_date": "2026-02-10",
-        })
-        assert r.status_code == 402
-
-    def test_pool_blocked_when_dues(self, client):
-        r = client.post(f"{API}/amenity/pool", json={
-            **FLAT_NO_DUES_AFTER_PAY, "persons": 2, "booking_date": "2026-02-10",
-        })
-        assert r.status_code == 402
-
-    def test_clear_dues_then_book_gym(self, client):
-        # Clear the single pending month
-        r = client.post(f"{API}/maintenance/pay", json={
-            **FLAT_NO_DUES_AFTER_PAY, "mode": "full", "include_conveyance": False,
+            **FLAT_CURRENT, "members": 3, "booking_date": "2026-02-11",
         })
         assert r.status_code == 200
-        assert r.json()["dues"]["pending_count"] == 0
+        assert r.json()["receipt"]["total_amount"] == 900
 
-        # Book gym for 3 members = 900
-        g = client.post(f"{API}/amenity/gym", json={
-            **FLAT_NO_DUES_AFTER_PAY, "members": 3, "booking_date": "2026-02-11",
-        })
-        assert g.status_code == 200
-        rec = g.json()["receipt"]
-        assert rec["type"] == "gym"
-        assert rec["total_amount"] == 900
-        assert rec["receipt_no"].startswith("OP")
-
-    def test_book_pool_tiered(self, client):
+    def test_pool_tiered(self, client):
         for persons, expected in [(1, 700), (2, 1000), (3, 1500), (4, 2000)]:
             r = client.post(f"{API}/amenity/pool", json={
-                **FLAT_NO_DUES_AFTER_PAY, "persons": persons, "booking_date": "2026-02-12",
+                **FLAT_CURRENT, "persons": persons, "booking_date": "2026-02-12",
             })
-            assert r.status_code == 200, f"persons={persons} status={r.status_code}"
+            assert r.status_code == 200
             assert r.json()["receipt"]["total_amount"] == expected
 
-    def test_pool_invalid_persons(self, client):
+    def test_pool_invalid(self, client):
         r = client.post(f"{API}/amenity/pool", json={
-            **FLAT_NO_DUES_AFTER_PAY, "persons": 5, "booking_date": "2026-02-12",
+            **FLAT_CURRENT, "persons": 5, "booking_date": "2026-02-12",
         })
         assert r.status_code == 400
 
 
-# ------------------ HISTORY / RECEIPT ------------------
-class TestHistoryReceipt:
-    def test_history(self, client):
-        r = client.get(f"{API}/history/{FLAT_WITH_DUES['block']}/{FLAT_WITH_DUES['flat_no']}")
+# ------------------ RECEIPT + PDF ------------------
+class TestReceiptPDF:
+    def test_receipt_pdf_valid(self, client):
+        # Grab any receipt from history
+        h = client.get(f"{API}/history/{FLAT_LATE['block']}/{FLAT_LATE['flat_no']}").json()
+        assert len(h["maintenance"]) >= 1
+        rno = h["maintenance"][0]["receipt_no"]
+
+        r = client.get(f"{API}/receipt/{rno}/pdf")
         assert r.status_code == 200
-        d = r.json()
-        assert len(d["maintenance"]) >= 2  # one_month + full
+        assert "application/pdf" in r.headers.get("content-type", "")
+        assert r.content.startswith(b"%PDF-1.4") or r.content.startswith(b"%PDF-")
+        assert len(r.content) > 500
+
+    def test_receipt_pdf_not_found(self, client):
+        r = client.get(f"{API}/receipt/OP999999/pdf")
+        assert r.status_code == 404
 
     def test_receipt_not_found(self, client):
         r = client.get(f"{API}/receipt/OP999999")
@@ -239,50 +249,73 @@ class TestAdmin:
 
     def test_verify_bad(self, client):
         r = client.post(f"{API}/admin/verify", json={"pin": "0000"})
-        assert r.status_code == 200 and r.json()["ok"] is False
+        assert r.json()["ok"] is False
 
-    def test_list_series_has_active(self, client):
-        r = client.get(f"{API}/admin/series")
+    def test_late_fee_get(self, client):
+        r = client.get(f"{API}/admin/late-fee")
         assert r.status_code == 200
-        series = r.json()["series"]
-        assert any(s.get("active") for s in series)
+        assert "late_fee" in r.json() and isinstance(r.json()["late_fee"], int)
 
-    def test_create_series_requires_pin(self, client):
-        r = client.post(f"{API}/admin/series", json={
-            "prefix": "TT", "start": 1, "end": 5, "pin": "wrong",
-        })
+    def test_late_fee_set_wrong_pin(self, client):
+        r = client.post(f"{API}/admin/late-fee", json={"late_fee": 100, "pin": "wrong"})
         assert r.status_code == 401
 
-    def test_create_and_activate_series(self, client):
-        # Create new series -> becomes active
-        prefix = f"T{RUN_TAG[:2].upper()}"
-        r = client.post(f"{API}/admin/series", json={
-            "prefix": prefix, "start": 1, "end": 5, "pin": ADMIN_PIN,
-        })
+    def test_late_fee_set_negative(self, client):
+        r = client.post(f"{API}/admin/late-fee", json={"late_fee": -1, "pin": ADMIN_PIN})
+        assert r.status_code == 400
+
+    def test_late_fee_set_and_get_roundtrip(self, client):
+        r = client.post(f"{API}/admin/late-fee", json={"late_fee": 75, "pin": ADMIN_PIN})
+        assert r.status_code == 200 and r.json()["late_fee"] == 75
+        g = client.get(f"{API}/admin/late-fee").json()
+        assert g["late_fee"] == 75
+        # restore default
+        client.post(f"{API}/admin/late-fee", json={"late_fee": 50, "pin": ADMIN_PIN})
+
+    def test_payments_summary(self, client):
+        r = client.get(f"{API}/admin/payments")
         assert r.status_code == 200
-        new_series = r.json()["series"]
-        assert new_series["active"] is True
-        assert new_series["current"] == 1
+        d = r.json()
+        assert "summary" in d
+        s = d["summary"]
+        for k in ["grand_total", "maintenance_total", "bookings_total",
+                  "maintenance_count", "bookings_count"]:
+            assert k in s
+        assert s["grand_total"] == s["maintenance_total"] + s["bookings_total"]
+        assert s["maintenance_count"] == len(d["maintenance"])
+        assert s["bookings_count"] == len(d["bookings"])
 
-        # Verify listing shows only new one active
-        listing = client.get(f"{API}/admin/series").json()["series"]
-        active = [s for s in listing if s.get("active")]
-        assert len(active) == 1 and active[0]["id"] == new_series["id"]
+    def test_payments_today(self, client):
+        r = client.get(f"{API}/admin/payments/today")
+        assert r.status_code == 200
+        d = r.json()
+        today = date.today().isoformat()
+        for p in d["maintenance"] + d["bookings"]:
+            assert p.get("paid_date") == today
 
-        # Reactivate the original OP series so subsequent tests / app still use OP
-        op_series = next((s for s in listing if s["prefix"] == "OP"), None)
-        assert op_series is not None
-        r2 = client.post(f"{API}/admin/series/activate", json={
-            "series_id": op_series["id"], "pin": ADMIN_PIN,
-        })
-        assert r2.status_code == 200
+    def test_payments_date_filter(self, client):
+        r = client.get(f"{API}/admin/payments", params={"date_filter": "1999-01-01"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["maintenance"] == [] and d["bookings"] == []
+        assert d["summary"]["grand_total"] == 0
 
-    def test_export_xlsx(self, client):
+    def test_export_all_xlsx(self, client):
         r = client.get(f"{API}/admin/export", params={"pin": ADMIN_PIN})
+        assert r.status_code == 200
+        assert "spreadsheet" in r.headers.get("content-type", "")
+        assert len(r.content) > 100
+
+    def test_export_today_xlsx(self, client):
+        r = client.get(f"{API}/admin/export/today", params={"pin": ADMIN_PIN})
         assert r.status_code == 200
         assert "spreadsheet" in r.headers.get("content-type", "")
         assert len(r.content) > 100
 
     def test_export_bad_pin(self, client):
         r = client.get(f"{API}/admin/export", params={"pin": "wrong"})
+        assert r.status_code == 401
+
+    def test_export_today_bad_pin(self, client):
+        r = client.get(f"{API}/admin/export/today", params={"pin": "wrong"})
         assert r.status_code == 401

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -6,6 +6,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
 import { getSession, clearSession, Session } from "@/src/session";
+import { BrandLogo } from "@/src/components/BrandLogo";
 
 export default function Home() {
   const router = useRouter();
@@ -46,14 +47,17 @@ export default function Home() {
       <LinearGradient colors={["#1a1508", "#0A0A0A"]} style={styles.headerGrad}>
         <SafeAreaView edges={["top"]}>
           <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.hello}>Namaste,</Text>
-              <Text style={styles.flatText}>
-                Block {session.block} · Flat {session.flat_no}
-              </Text>
-              {!!session.owner_name && (
-                <Text style={styles.ownerText}>{session.owner_name}</Text>
-              )}
+            <View style={styles.logoRow}>
+              <BrandLogo size={54} />
+              <View>
+                <Text style={styles.hello}>NAMASTE</Text>
+                <Text style={styles.flatText}>
+                  {session.block} · {session.flat_no}
+                </Text>
+                {!!session.owner_name && (
+                  <Text style={styles.ownerText}>{session.owner_name}</Text>
+                )}
+              </View>
             </View>
             <Pressable testID="logout-btn" onPress={onLogout} style={styles.logoutBtn}>
               <Ionicons name="log-out-outline" size={18} color={COLORS.brand} />
@@ -80,6 +84,7 @@ export default function Home() {
           </Text>
           <Text style={styles.duesSub}>
             {session.bhk_type} · ₹{dues?.rate?.toLocaleString("en-IN") || 0} per month
+            {dues?.late_fee_total > 0 ? ` · Late fee ₹${dues.late_fee_total}` : ""}
           </Text>
         </View>
 
@@ -150,8 +155,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: COLORS.surface, justifyContent: "center", alignItems: "center" },
   headerGrad: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.lg },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: SPACING.md },
-  hello: { fontFamily: FONTS.sans, color: COLORS.muted, fontSize: 12, letterSpacing: 2 },
-  flatText: { fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 22, marginTop: 2 },
+  logoRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md },
+  hello: { fontFamily: FONTS.sans, color: COLORS.muted, fontSize: 10, letterSpacing: 2 },
+  flatText: { fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 20, marginTop: 2 },
   ownerText: { fontFamily: FONTS.sans, color: COLORS.brand, fontSize: 12, marginTop: 2 },
   logoutBtn: {
     width: 40, height: 40, borderRadius: 20,

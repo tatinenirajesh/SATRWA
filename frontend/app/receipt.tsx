@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Linking, Share } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -121,6 +121,27 @@ export default function Receipt() {
           </Text>
         </View>
 
+        <View style={styles.actionsRow}>
+          <Pressable
+            testID="download-pdf-btn"
+            onPress={() => Linking.openURL(`${API}/receipt/${rec.receipt_no}/pdf`)}
+            style={styles.actionBtn}
+          >
+            <Ionicons name="download-outline" size={16} color={COLORS.brand} />
+            <Text style={styles.actionText}>PDF</Text>
+          </Pressable>
+          <Pressable
+            testID="share-btn"
+            onPress={() => Share.share({
+              message: `SATRWA Receipt ${rec.receipt_no} for Block ${rec.block}-${rec.flat_no}. Total ₹${rec.total_amount}. Download: ${API}/receipt/${rec.receipt_no}/pdf`,
+            })}
+            style={styles.actionBtn}
+          >
+            <Ionicons name="share-outline" size={16} color={COLORS.brand} />
+            <Text style={styles.actionText}>Share</Text>
+          </Pressable>
+        </View>
+
         <Pressable testID="done-btn" onPress={() => router.replace("/home")} style={styles.doneBtn}>
           <Ionicons name="home-outline" size={16} color={COLORS.brand} />
           <Text style={styles.doneText}>Back to Home</Text>
@@ -170,6 +191,9 @@ const styles = StyleSheet.create({
   stamp: { alignSelf: "flex-end", marginTop: SPACING.lg, borderWidth: 2, borderColor: COLORS.success, paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: 4, transform: [{ rotate: "-8deg" }] },
   stampText: { color: COLORS.success, fontFamily: FONTS.serif, fontSize: 16, letterSpacing: 3, fontWeight: "700" },
   footNote: { color: COLORS.muted, fontSize: 10, textAlign: "center", marginTop: SPACING.xl, fontFamily: FONTS.sans, fontStyle: "italic" },
-  doneBtn: { marginTop: SPACING.xl, height: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.brand, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: SPACING.sm },
+  doneBtn: { marginTop: SPACING.md, height: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.brand, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: SPACING.sm },
   doneText: { color: COLORS.brand, fontSize: 14, fontWeight: "700", fontFamily: FONTS.sans },
+  actionsRow: { flexDirection: "row", gap: SPACING.md, marginTop: SPACING.xl },
+  actionBtn: { flex: 1, height: 48, borderRadius: RADIUS.md, backgroundColor: COLORS.brandTint, borderWidth: 1, borderColor: COLORS.brand, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: SPACING.sm },
+  actionText: { color: COLORS.brand, fontSize: 14, fontWeight: "700", fontFamily: FONTS.sans },
 });

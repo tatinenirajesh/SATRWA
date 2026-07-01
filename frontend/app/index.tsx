@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, Pressable, TextInput, ScrollView,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert
+  View, Text, StyleSheet, Pressable, TextInput,
+  ActivityIndicator, Alert
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { COLORS, SPACING, RADIUS, FONTS, BLOCKS, API } from "@/src/theme";
 import { saveSession, getSession } from "@/src/session";
+import { BrandLogo } from "@/src/components/BrandLogo";
 
 export default function Login() {
   const router = useRouter();
@@ -97,116 +99,130 @@ export default function Login() {
         colors={["#1a1508", "#0A0A0A", "#0A0A0A"]}
         style={StyleSheet.absoluteFill}
       />
-      <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
+      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={100}
+          extraKeyboardSpace={20}
         >
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-            <View style={styles.crestWrap}>
-              <View style={styles.crestOuter}>
-                <View style={styles.crestInner}>
-                  <Text style={styles.crestMark}>SATRWA</Text>
-                </View>
+          <View style={styles.crestWrap}>
+            <BrandLogo size={140} />
+          </View>
+
+          <Text style={styles.heading}>
+            {mode === "login" ? "Resident Access" : "Register your Flat"}
+          </Text>
+          <Text style={styles.subheading}>
+            {mode === "login"
+              ? "Select your block and enter flat number"
+              : "First time here. Tell us a bit about your flat."}
+          </Text>
+
+          <Text style={styles.label}>Block</Text>
+          <View style={styles.blockRow}>
+            {BLOCKS.map(b => {
+              const active = block === b;
+              return (
+                <Pressable
+                  key={b}
+                  testID={`block-select-${b}`}
+                  onPress={() => setBlock(b)}
+                  style={[styles.blockPill, active && styles.blockPillActive]}
+                >
+                  <Text style={[styles.blockText, active && styles.blockTextActive]}>{b}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>Flat Number</Text>
+          <TextInput
+            testID="flat-no-input"
+            value={flatNo}
+            onChangeText={setFlatNo}
+            placeholder="e.g. 101"
+            placeholderTextColor={COLORS.muted}
+            style={styles.input}
+            autoCapitalize="characters"
+            returnKeyType="done"
+          />
+
+          {mode === "register" && (
+            <>
+              <Text style={styles.label}>Flat Type</Text>
+              <View style={styles.blockRow}>
+                {(["2BHK", "3BHK"] as const).map(t => {
+                  const active = bhk === t;
+                  return (
+                    <Pressable
+                      key={t}
+                      testID={`bhk-select-${t}`}
+                      onPress={() => setBhk(t)}
+                      style={[styles.bhkPill, active && styles.blockPillActive]}
+                    >
+                      <Text style={[styles.blockText, active && styles.blockTextActive]}>{t}</Text>
+                      <Text style={[styles.bhkAmt, active && { color: COLORS.onBrand }]}>
+                        ₹{t === "2BHK" ? "2,000" : "2,500"}/mo
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-              <Text style={styles.brandTitle}>Sri Anjaneya</Text>
-              <Text style={styles.brandSub}>TOWNSHIP</Text>
-              <View style={styles.rule} />
-            </View>
 
-            <Text style={styles.heading}>
-              {mode === "login" ? "Resident Access" : "Register your Flat"}
-            </Text>
-            <Text style={styles.subheading}>
-              {mode === "login"
-                ? "Select your block and enter flat number"
-                : "First time here. Tell us a bit about your flat."}
-            </Text>
+              <Text style={styles.label}>Owner Name (optional)</Text>
+              <TextInput
+                testID="owner-name-input"
+                value={ownerName}
+                onChangeText={setOwnerName}
+                placeholder="Full name"
+                placeholderTextColor={COLORS.muted}
+                style={styles.input}
+                returnKeyType="next"
+              />
 
-            <Text style={styles.label}>Block</Text>
-            <View style={styles.blockRow}>
-              {BLOCKS.map(b => {
-                const active = block === b;
-                return (
-                  <Pressable
-                    key={b}
-                    testID={`block-select-${b}`}
-                    onPress={() => setBlock(b)}
-                    style={[styles.blockPill, active && styles.blockPillActive]}
-                  >
-                    <Text style={[styles.blockText, active && styles.blockTextActive]}>{b}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+              <Text style={styles.label}>Phone (optional)</Text>
+              <TextInput
+                testID="phone-input"
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="10-digit mobile"
+                placeholderTextColor={COLORS.muted}
+                style={styles.input}
+                keyboardType="phone-pad"
+                returnKeyType="next"
+              />
 
-            <Text style={styles.label}>Flat Number</Text>
-            <TextInput
-              testID="flat-no-input"
-              value={flatNo}
-              onChangeText={setFlatNo}
-              placeholder="e.g. 101"
-              placeholderTextColor={COLORS.muted}
-              style={styles.input}
-              autoCapitalize="characters"
-            />
+              <Text style={styles.label}>Dues Start Month (YYYY-MM)</Text>
+              <TextInput
+                testID="start-month-input"
+                value={startMonth}
+                onChangeText={setStartMonth}
+                placeholder="2025-01"
+                placeholderTextColor={COLORS.muted}
+                style={styles.input}
+                returnKeyType="done"
+              />
+              <Text style={styles.hint}>Maintenance dues will be counted from this month.</Text>
+            </>
+          )}
 
-            {mode === "register" && (
-              <>
-                <Text style={styles.label}>Flat Type</Text>
-                <View style={styles.blockRow}>
-                  {(["2BHK", "3BHK"] as const).map(t => {
-                    const active = bhk === t;
-                    return (
-                      <Pressable
-                        key={t}
-                        testID={`bhk-select-${t}`}
-                        onPress={() => setBhk(t)}
-                        style={[styles.bhkPill, active && styles.blockPillActive]}
-                      >
-                        <Text style={[styles.blockText, active && styles.blockTextActive]}>{t}</Text>
-                        <Text style={[styles.bhkAmt, active && { color: COLORS.onBrand }]}>
-                          ₹{t === "2BHK" ? "2,000" : "2,500"}/mo
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+          {mode === "register" && (
+            <Pressable testID="back-to-login" onPress={() => setMode("login")} style={{ marginTop: SPACING.lg, alignSelf: "center" }}>
+              <Text style={styles.link}>Back to Login</Text>
+            </Pressable>
+          )}
 
-                <Text style={styles.label}>Owner Name (optional)</Text>
-                <TextInput
-                  testID="owner-name-input"
-                  value={ownerName}
-                  onChangeText={setOwnerName}
-                  placeholder="Full name"
-                  placeholderTextColor={COLORS.muted}
-                  style={styles.input}
-                />
+          <Pressable testID="admin-link" onPress={() => router.push("/admin")} style={styles.adminLink}>
+            <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
+            <Text style={styles.adminLinkText}>  Committee Admin</Text>
+          </Pressable>
 
-                <Text style={styles.label}>Phone (optional)</Text>
-                <TextInput
-                  testID="phone-input"
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="10-digit mobile"
-                  placeholderTextColor={COLORS.muted}
-                  style={styles.input}
-                  keyboardType="phone-pad"
-                />
+          <View style={{ height: 80 }} />
+        </KeyboardAwareScrollView>
 
-                <Text style={styles.label}>Dues Start Month (YYYY-MM)</Text>
-                <TextInput
-                  testID="start-month-input"
-                  value={startMonth}
-                  onChangeText={setStartMonth}
-                  placeholder="2025-01"
-                  placeholderTextColor={COLORS.muted}
-                  style={styles.input}
-                />
-                <Text style={styles.hint}>Maintenance dues will be counted from this month.</Text>
-              </>
-            )}
-
+        <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+          <SafeAreaView edges={["bottom"]} style={styles.stickyFooter}>
             <Pressable
               testID={mode === "login" ? "login-btn" : "register-btn"}
               onPress={mode === "login" ? onLogin : onRegister}
@@ -224,19 +240,8 @@ export default function Login() {
                 </>
               )}
             </Pressable>
-
-            {mode === "register" && (
-              <Pressable testID="back-to-login" onPress={() => setMode("login")} style={{ marginTop: SPACING.md, alignSelf: "center" }}>
-                <Text style={styles.link}>Back to Login</Text>
-              </Pressable>
-            )}
-
-            <Pressable testID="admin-link" onPress={() => router.push("/admin")} style={styles.adminLink}>
-              <Ionicons name="shield-outline" size={14} color={COLORS.muted} />
-              <Text style={styles.adminLinkText}>  Committee Admin</Text>
-            </Pressable>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </SafeAreaView>
+        </KeyboardStickyView>
       </SafeAreaView>
     </View>
   );
@@ -245,39 +250,14 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.surface },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xl },
-  crestWrap: { alignItems: "center", marginTop: SPACING.xl, marginBottom: SPACING.xl },
-  crestOuter: {
-    width: 96, height: 96, borderRadius: 48,
-    borderWidth: 2, borderColor: COLORS.brand,
-    justifyContent: "center", alignItems: "center",
-    backgroundColor: COLORS.surfaceSecondary,
-  },
-  crestInner: {
-    width: 78, height: 78, borderRadius: 39,
-    borderWidth: 1, borderColor: COLORS.brandDim,
-    justifyContent: "center", alignItems: "center",
-    backgroundColor: "#0f0f0f",
-  },
-  crestMark: {
-    fontFamily: FONTS.serif, color: COLORS.brand,
-    fontSize: 14, letterSpacing: 2, fontWeight: "600",
-  },
-  brandTitle: {
-    fontFamily: FONTS.serif, color: COLORS.onSurface,
-    fontSize: 32, marginTop: SPACING.md, letterSpacing: 1,
-  },
-  brandSub: {
-    fontFamily: FONTS.sans, color: COLORS.brand,
-    fontSize: 12, letterSpacing: 6, marginTop: 2,
-  },
-  rule: { width: 40, height: 1, backgroundColor: COLORS.brand, marginTop: SPACING.md, opacity: 0.6 },
+  crestWrap: { alignItems: "center", marginTop: SPACING.md, marginBottom: SPACING.md },
   heading: {
     fontFamily: FONTS.serif, color: COLORS.onSurface,
     fontSize: 24, marginTop: SPACING.md,
   },
   subheading: {
     fontFamily: FONTS.sans, color: COLORS.muted,
-    fontSize: 13, marginTop: 4, marginBottom: SPACING.xl,
+    fontSize: 13, marginTop: 4, marginBottom: SPACING.lg,
   },
   label: {
     color: COLORS.onSurfaceTertiary, fontSize: 12,
@@ -298,12 +278,8 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
   bhkAmt: { color: COLORS.muted, fontSize: 12, marginTop: 2, fontFamily: FONTS.sans },
-  blockPillActive: {
-    backgroundColor: COLORS.brand, borderColor: COLORS.brand,
-  },
-  blockText: {
-    fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 18,
-  },
+  blockPillActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  blockText: { fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 18 },
   blockTextActive: { color: COLORS.onBrand, fontWeight: "700" },
   input: {
     height: 52, borderRadius: RADIUS.md,
@@ -313,8 +289,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg, fontFamily: FONTS.sans,
   },
   hint: { color: COLORS.muted, fontSize: 11, marginTop: 6, fontFamily: FONTS.sans },
+  stickyFooter: {
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
+    paddingHorizontal: SPACING.xl, paddingTop: SPACING.md,
+  },
   primaryBtn: {
-    marginTop: SPACING.xxl, height: 54, borderRadius: RADIUS.md,
+    height: 54, borderRadius: RADIUS.md,
     backgroundColor: COLORS.brand, justifyContent: "center",
     alignItems: "center", flexDirection: "row", gap: SPACING.sm,
   },
@@ -324,7 +305,7 @@ const styles = StyleSheet.create({
   },
   link: { color: COLORS.brand, fontSize: 13, fontFamily: FONTS.sans },
   adminLink: {
-    marginTop: SPACING.xxxl, alignSelf: "center", flexDirection: "row", alignItems: "center",
+    marginTop: SPACING.xl, alignSelf: "center", flexDirection: "row", alignItems: "center",
   },
   adminLinkText: { color: COLORS.muted, fontSize: 12, fontFamily: FONTS.sans },
 });
