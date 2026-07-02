@@ -61,7 +61,8 @@ export default function Login() {
   };
 
   const onRegister = async () => {
-    if (!/^\d{4}-\d{2}$/.test(startMonth)) return Alert.alert("Invalid Start Month", "Use format YYYY-MM (e.g. 2025-01)");
+    if (!ownerName.trim()) return Alert.alert("Owner Name Required", "Please enter the owner's name.");
+    if (!/^\d{10}$/.test(phone.trim())) return Alert.alert("Valid Phone Required", "Please enter a valid 10-digit mobile number.");
     setLoading(true);
     try {
       const res = await fetch(`${API}/auth/register`, {
@@ -107,7 +108,7 @@ export default function Login() {
           extraKeyboardSpace={20}
         >
           <View style={styles.crestWrap}>
-            <BrandLogo size={140} />
+            <BrandLogo size={210} />
           </View>
 
           <Text style={styles.heading}>
@@ -170,7 +171,7 @@ export default function Login() {
                 })}
               </View>
 
-              <Text style={styles.label}>Owner Name (optional)</Text>
+              <Text style={styles.label}>Owner Name</Text>
               <TextInput
                 testID="owner-name-input"
                 value={ownerName}
@@ -181,7 +182,7 @@ export default function Login() {
                 returnKeyType="next"
               />
 
-              <Text style={styles.label}>Phone (optional)</Text>
+              <Text style={styles.label}>Phone</Text>
               <TextInput
                 testID="phone-input"
                 value={phone}
@@ -190,20 +191,9 @@ export default function Login() {
                 placeholderTextColor={COLORS.muted}
                 style={styles.input}
                 keyboardType="phone-pad"
-                returnKeyType="next"
-              />
-
-              <Text style={styles.label}>Dues Start Month (YYYY-MM)</Text>
-              <TextInput
-                testID="start-month-input"
-                value={startMonth}
-                onChangeText={setStartMonth}
-                placeholder="2025-01"
-                placeholderTextColor={COLORS.muted}
-                style={styles.input}
                 returnKeyType="done"
+                maxLength={10}
               />
-              <Text style={styles.hint}>Maintenance dues will be counted from this month.</Text>
             </>
           )}
 
@@ -250,23 +240,23 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.surface },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xl },
-  crestWrap: { alignItems: "center", marginTop: SPACING.md, marginBottom: SPACING.md },
+  crestWrap: { alignItems: "center", marginTop: -SPACING.sm, marginBottom: 0 },
   heading: {
     fontFamily: FONTS.serif, color: COLORS.onSurface,
-    fontSize: 24, marginTop: SPACING.md,
+    fontSize: 24, marginTop: SPACING.sm, textAlign: "center",
   },
   subheading: {
     fontFamily: FONTS.sans, color: COLORS.muted,
-    fontSize: 13, marginTop: 4, marginBottom: SPACING.lg,
+    fontSize: 13, marginTop: 4, marginBottom: SPACING.lg, textAlign: "center",
   },
   label: {
     color: COLORS.onSurfaceTertiary, fontSize: 12,
     letterSpacing: 1.2, marginTop: SPACING.lg, marginBottom: SPACING.sm,
     fontFamily: FONTS.sans, textTransform: "uppercase",
   },
-  blockRow: { flexDirection: "row", gap: SPACING.sm, flexWrap: "wrap" },
+  blockRow: { flexDirection: "row", gap: SPACING.sm },
   blockPill: {
-    minWidth: 52, height: 48, paddingHorizontal: SPACING.md,
+    flex: 1, height: 48, paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
     backgroundColor: COLORS.surfaceSecondary,
     justifyContent: "center", alignItems: "center",

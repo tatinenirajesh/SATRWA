@@ -18,7 +18,7 @@ export default function Pay() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     purpose: string; amount: string; mode?: string; include_conveyance?: string;
-    members?: string; persons?: string;
+    include_opening_due?: string; members?: string; persons?: string;
   }>();
 
   const amount = Number(params.amount || 0);
@@ -94,6 +94,7 @@ export default function Pay() {
             ...commonBody,
             mode: params.mode || "full",
             include_conveyance: params.include_conveyance === "1",
+            include_opening_due: params.include_opening_due === "1",
           }),
         });
         const d = await r.json();

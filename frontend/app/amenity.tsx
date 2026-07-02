@@ -35,7 +35,7 @@ export default function Amenity() {
     return <View style={styles.center}><ActivityIndicator color={COLORS.brand} size="large" /></View>;
   }
 
-  const blocked = dues.pending_count > 0;
+  const blocked = !!dues.has_any_due;
   const gymTotal = gymCount * 300;
   const poolTotal = POOL[poolPersons];
 

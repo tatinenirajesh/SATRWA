@@ -14,6 +14,7 @@ export default function Maintenance() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"full" | "current_month">("full");
   const [includeConveyance, setIncludeConveyance] = useState(false);
+  const [includeOpeningDue, setIncludeOpeningDue] = useState(true);
 
   const load = useCallback(async () => {
     const s = await getSession();
@@ -42,10 +43,14 @@ export default function Maintenance() {
     : (currentMonthPending ? [currentMonth] : []);
   const lateMonthsPaid = monthsToPay.filter(m => lateMonths.includes(m));
 
+  const openingDueRemaining: number = dues.opening_due_remaining || 0;
+  const canIncludeOpeningDue = mode === "full" && openingDueRemaining > 0;
+
   const maint = monthsToPay.length * rate;
   const lateFee = lateMonthsPaid.length * lateFeePerMonth;
   const conveyance = includeConveyance ? 250 : 0;
-  const total = maint + conveyance + lateFee;
+  const openingDueAmt = canIncludeOpeningDue && includeOpeningDue ? openingDueRemaining : 0;
+  const total = maint + conveyance + lateFee + openingDueAmt;
   const canPay = total > 0;
 
   const proceed = () => {
@@ -56,6 +61,7 @@ export default function Maintenance() {
         amount: String(total),
         mode,
         include_conveyance: includeConveyance ? "1" : "0",
+        include_opening_due: canIncludeOpeningDue && includeOpeningDue ? "1" : "0",
       },
     });
   };
@@ -81,6 +87,7 @@ export default function Maintenance() {
         </Text>
         <Text style={styles.totalSub}>
           {pending.length} pending month{pending.length === 1 ? "" : "s"} · {session.bhk_type} · ₹{rate}/mo
+          {openingDueRemaining > 0 ? ` · Opening due ₹${openingDueRemaining.toLocaleString("en-IN")}` : ""}
         </Text>
 
         {dues.late_count > 0 && (
@@ -98,12 +105,28 @@ export default function Maintenance() {
           </View>
         )}
 
-        {pending.length === 0 ? (
+        {openingDueRemaining > 0 && (
+          <View style={styles.warnCard} testID="opening-due-notice">
+            <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warnTitle}>
+                Opening / Historical Due: ₹{openingDueRemaining.toLocaleString("en-IN")}
+              </Text>
+              <Text style={styles.warnSub}>
+                Set by the committee for dues prior to app registration. Clear it together with a full payment.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {!dues.has_any_due ? (
           <View style={styles.clearCard}>
             <Ionicons name="checkmark-circle" size={40} color={COLORS.success} />
             <Text style={styles.clearTitle}>All Dues Cleared</Text>
             <Text style={styles.clearSub}>You have no pending maintenance payments.</Text>
           </View>
+        ) : pending.length === 0 ? (
+          <View style={{ marginTop: SPACING.xl }} />
         ) : (
           <>
             <Text style={styles.sectionLabel}>PAYMENT OPTION</Text>
@@ -165,6 +188,28 @@ export default function Maintenance() {
           </View>
         </View>
 
+        {openingDueRemaining > 0 && (
+          <View style={[styles.conveyRow, { marginTop: SPACING.md }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.conveyTitle}>Clear Opening Due</Text>
+              <Text style={styles.conveySub}>
+                {canIncludeOpeningDue ? "Included with full payment" : "Switch to \"Pay All Pending\" to clear this"}
+              </Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.conveyAmt}>₹{openingDueRemaining.toLocaleString("en-IN")}</Text>
+              <Switch
+                testID="opening-due-switch"
+                value={includeOpeningDue}
+                onValueChange={setIncludeOpeningDue}
+                disabled={!canIncludeOpeningDue}
+                trackColor={{ false: COLORS.surfaceTertiary, true: COLORS.brand }}
+                thumbColor={includeOpeningDue ? COLORS.onBrand : "#666"}
+              />
+            </View>
+          </View>
+        )}
+
         <Text style={styles.sectionLabel}>SUMMARY</Text>
         <View style={styles.summaryCard}>
           <SummaryRow label={`Maintenance × ${monthsToPay.length}`} value={`₹${maint.toLocaleString("en-IN")}`} />
@@ -175,6 +220,12 @@ export default function Maintenance() {
           />
           <View style={styles.divider} />
           <SummaryRow label="Conveyance" value={`₹${conveyance.toLocaleString("en-IN")}`} />
+          {openingDueRemaining > 0 && (
+            <>
+              <View style={styles.divider} />
+              <SummaryRow label="Opening Due" value={`₹${openingDueAmt.toLocaleString("en-IN")}`} />
+            </>
+          )}
           <View style={styles.divider} />
           <SummaryRow label="Total" value={`₹${total.toLocaleString("en-IN")}`} bold />
         </View>

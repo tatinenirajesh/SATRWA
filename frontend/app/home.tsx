@@ -40,7 +40,7 @@ export default function Home() {
     );
   }
 
-  const hasDues = dues && dues.pending_count > 0;
+  const hasDues = !!dues?.has_any_due;
 
   return (
     <View style={styles.container}>
@@ -75,7 +75,11 @@ export default function Home() {
             <Text style={styles.duesLabel}>OUTSTANDING DUES</Text>
             <View style={[styles.badge, hasDues ? styles.badgeWarn : styles.badgeOk]}>
               <Text style={[styles.badgeText, { color: hasDues ? COLORS.warning : COLORS.success }]}>
-                {hasDues ? `${dues.pending_count} MONTH${dues.pending_count > 1 ? "S" : ""}` : "CLEAR"}
+                {hasDues
+                  ? dues.pending_count > 0
+                    ? `${dues.pending_count} MONTH${dues.pending_count > 1 ? "S" : ""}`
+                    : "OPENING DUE"
+                  : "CLEAR"}
               </Text>
             </View>
           </View>
@@ -85,6 +89,7 @@ export default function Home() {
           <Text style={styles.duesSub}>
             {session.bhk_type} · ₹{dues?.rate?.toLocaleString("en-IN") || 0} per month
             {dues?.late_fee_total > 0 ? ` · Late fee ₹${dues.late_fee_total}` : ""}
+            {dues?.opening_due_remaining > 0 ? ` · Opening due ₹${dues.opening_due_remaining.toLocaleString("en-IN")}` : ""}
           </Text>
         </View>
 
@@ -105,7 +110,7 @@ export default function Home() {
               <Ionicons name="receipt-outline" size={26} color={COLORS.brand} />
             </View>
             <Text style={styles.heroTitle}>Maintenance</Text>
-            <Text style={styles.heroSub}>Pay monthly dues & conveyance</Text>
+            <Text style={styles.heroSub}>Pay monthly dues</Text>
             <View style={styles.heroCta}>
               <Text style={styles.heroCtaText}>PAY NOW</Text>
               <Ionicons name="arrow-forward" size={16} color={COLORS.brand} />
@@ -131,6 +136,29 @@ export default function Home() {
             <Text style={styles.heroSub}>Book Gym or Swimming Pool</Text>
             <View style={styles.heroCta}>
               <Text style={styles.heroCtaText}>BOOK NOW</Text>
+              <Ionicons name="arrow-forward" size={16} color={COLORS.brand} />
+            </View>
+          </View>
+        </Pressable>
+
+        <Pressable
+          testID="conveyance-card"
+          onPress={() => router.push({ pathname: "/pay", params: { purpose: "conveyance", amount: "250", mode: "full", include_conveyance: "1" } })}
+          style={({ pressed }) => [styles.heroCard, pressed && { opacity: 0.9 }]}
+        >
+          <LinearGradient
+            colors={["#12201a", "#0A0A0A"]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.heroInner}>
+            <View style={styles.heroIcon}>
+              <Ionicons name="swap-horizontal-outline" size={26} color={COLORS.brand} />
+            </View>
+            <Text style={styles.heroTitle}>Conveyance</Text>
+            <Text style={styles.heroSub}>One-time move-in / move-out charge · ₹250</Text>
+            <View style={styles.heroCta}>
+              <Text style={styles.heroCtaText}>PAY NOW</Text>
               <Ionicons name="arrow-forward" size={16} color={COLORS.brand} />
             </View>
           </View>
@@ -184,29 +212,29 @@ const styles = StyleSheet.create({
   duesSub: { fontFamily: FONTS.sans, color: COLORS.onSurfaceTertiary, fontSize: 13, marginTop: 4 },
   sectionTitle: {
     fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 20,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.md, textAlign: "center",
   },
   heroCard: {
     height: 160, borderRadius: RADIUS.lg, overflow: "hidden",
     borderWidth: 1, borderColor: COLORS.border,
     marginBottom: SPACING.lg,
   },
-  heroInner: { flex: 1, padding: SPACING.xl, justifyContent: "space-between" },
+  heroInner: { flex: 1, padding: SPACING.xl, justifyContent: "space-between", alignItems: "center" },
   heroIcon: {
     width: 48, height: 48, borderRadius: 24,
     borderWidth: 1, borderColor: COLORS.brand,
     justifyContent: "center", alignItems: "center",
     backgroundColor: COLORS.brandTint,
   },
-  heroTitle: { fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 26 },
-  heroSub: { fontFamily: FONTS.sans, color: COLORS.muted, fontSize: 13, marginTop: -8 },
-  heroCta: { flexDirection: "row", alignItems: "center", gap: 6 },
+  heroTitle: { fontFamily: FONTS.serif, color: COLORS.onSurface, fontSize: 26, textAlign: "center" },
+  heroSub: { fontFamily: FONTS.sans, color: COLORS.muted, fontSize: 13, marginTop: -8, textAlign: "center" },
+  heroCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   heroCtaText: { color: COLORS.brand, fontSize: 12, letterSpacing: 2, fontWeight: "700", fontFamily: FONTS.sans },
   secondaryRow: {
-    flexDirection: "row", alignItems: "center", gap: SPACING.md,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.md,
     padding: SPACING.lg, borderRadius: RADIUS.md,
     backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border,
     marginTop: SPACING.md,
   },
-  secondaryText: { flex: 1, color: COLORS.onSurface, fontFamily: FONTS.sans, fontSize: 15 },
+  secondaryText: { color: COLORS.onSurface, fontFamily: FONTS.sans, fontSize: 15 },
 });
