@@ -62,6 +62,7 @@ class PayMaintenance(BaseModel):
     flat_no: str
     mode: Literal["full", "current_month"]
     include_conveyance: bool = False
+    include_opening_due: bool = False
     upi_id: Optional[str] = ""
     upi_ref_no: Optional[str] = ""
 
@@ -100,6 +101,54 @@ class VerifyPayment(BaseModel):
     pin: str
     verified: bool = True
 
+class OpeningDueSet(BaseModel):
+    block: str
+    flat_no: str
+    amount: float
+    pin: str
+
+class FlatDelete(BaseModel):
+    block: str
+    flat_no: str
+    pin: str
+
+class TestPayment(BaseModel):
+    block: str
+    flat_no: str
+    amount: float
+    note: Optional[str] = "Admin Test Payment"
+    pin: str
+
+class TestReset(BaseModel):
+    pin: str
+    scope: Literal["flat", "all_test"] = "flat"
+    block: Optional[str] = None
+    flat_no: Optional[str] = None
+
+class CorporateFlatEntry(BaseModel):
+    block: str
+    flat_no: str
+
+class CorporateRegister(BaseModel):
+    name: str
+    pin: str
+    flats: List[CorporateFlatEntry] = []
+
+class CorporateLogin(BaseModel):
+    name: str
+    pin: str
+
+class CorporatePayEntry(BaseModel):
+    block: str
+    flat_no: str
+    amount: float
+
+class CorporatePay(BaseModel):
+    payer_id: str
+    entries: List[CorporatePayEntry]
+    txn_ref: Optional[str] = ""
+    upi_id: Optional[str] = ""
+
 # ---------------- HELPERS ----------------
 def month_range(start_ym: str, end_ym: str) -> List[str]:
     sy, sm = map(int, start_ym.split("-"))
@@ -137,9 +186,11 @@ async def compute_dues(flat: dict) -> dict:
         {"block": flat["block"], "flat_no": flat["flat_no"]}, {"_id": 0}
     ).to_list(1000)
     paid_months = set()
+    opening_due_paid = 0.0
     for p in paid_docs:
         for m in p.get("months_covered", []):
             paid_months.add(m)
+        opening_due_paid += p.get("opening_due_amount", 0) or 0
     pending = [m for m in all_months if m not in paid_months]
     rate = MAINT_RATES[flat["bhk_type"]]
     late_fee = await get_late_fee()
@@ -153,6 +204,12 @@ async def compute_dues(flat: dict) -> dict:
             late_months.append(m)
     late_fee_total = len(late_months) * late_fee
     maint_total = len(pending) * rate
+
+    # Opening due (manually entered historical/pre-app due by admin)
+    opening_due_set = flat.get("opening_due", 0) or 0
+    opening_due_remaining = max(0.0, opening_due_set - opening_due_paid)
+
+    total_due = maint_total + late_fee_total + opening_due_remaining
     return {
         "bhk_type": flat["bhk_type"],
         "rate": rate,
@@ -163,13 +220,16 @@ async def compute_dues(flat: dict) -> dict:
         "late_fee_per_month": late_fee,
         "late_fee_total": late_fee_total,
         "maintenance_total": maint_total,
-        "total_due": maint_total + late_fee_total,
+        "opening_due": opening_due_set,
+        "opening_due_remaining": opening_due_remaining,
+        "total_due": total_due,
         "current_month": now_ym,
         "current_month_pending": now_ym in pending,
         "current_month_late": now_ym in late_months,
         "due_day": DUE_DAY,
         "all_months": all_months,
         "paid_months": sorted(list(paid_months)),
+        "has_any_due": total_due > 0,
     }
 
 async def next_receipt_number() -> str:
@@ -270,7 +330,8 @@ async def pay_maintenance(body: PayMaintenance):
         raise HTTPException(404, "Flat not registered")
     dues = await compute_dues(flat)
     pending = dues["pending_months"]
-    if not pending and not body.include_conveyance:
+    opening_due_remaining = dues["opening_due_remaining"]
+    if not pending and not body.include_conveyance and not (body.include_opening_due and opening_due_remaining > 0):
         raise HTTPException(400, "No dues to pay.")
 
     if body.mode == "full":
@@ -288,7 +349,9 @@ async def pay_maintenance(body: PayMaintenance):
     rate = dues["rate"]
     maint_amount = len(months_to_pay) * rate
     conveyance = CONVEYANCE if body.include_conveyance else 0
-    total = maint_amount + conveyance + late_fee_amount
+    # Opening due can only be cleared alongside a "full" payment (must clear everything together)
+    opening_due_amount = opening_due_remaining if (body.include_opening_due and body.mode == "full") else 0
+    total = maint_amount + conveyance + late_fee_amount + opening_due_amount
 
     receipt_no = await next_receipt_number()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -309,6 +372,7 @@ async def pay_maintenance(body: PayMaintenance):
         "conveyance_amount": conveyance,
         "late_fee_amount": late_fee_amount,
         "late_months_paid": late_months_paid,
+        "opening_due_amount": opening_due_amount,
         "total_amount": total,
         "upi_id": body.upi_id or "",
         "upi_ref_no": (body.upi_ref_no or "").strip(),
@@ -328,7 +392,7 @@ async def book_gym(body: BookGym):
     if not flat:
         raise HTTPException(404, "Flat not registered")
     dues = await compute_dues(flat)
-    if dues["pending_count"] > 0:
+    if dues["has_any_due"]:
         raise HTTPException(status_code=402, detail={
             "message": "Clear maintenance dues before booking amenity.",
             "dues": dues,
@@ -367,7 +431,7 @@ async def book_pool(body: BookPool):
     if not flat:
         raise HTTPException(404, "Flat not registered")
     dues = await compute_dues(flat)
-    if dues["pending_count"] > 0:
+    if dues["has_any_due"]:
         raise HTTPException(status_code=402, detail={
             "message": "Clear maintenance dues before booking amenity.",
             "dues": dues,
@@ -590,6 +654,244 @@ async def admin_verify_payment(body: VerifyPayment):
         if r2.matched_count == 0:
             raise HTTPException(404, "Receipt not found")
     return {"ok": True, "verified": body.verified}
+
+# -------- ADMIN: TEST TOOLS --------
+@api_router.post("/admin/test-payment")
+async def admin_test_payment(body: TestPayment):
+    """Record a payment of any custom amount (e.g. Re.1) for real UPI testing. Tagged is_test=True."""
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    flat = await get_flat(body.block, body.flat_no)
+    if not flat:
+        raise HTTPException(404, "Flat not registered")
+    if body.amount <= 0:
+        raise HTTPException(400, "Amount must be greater than 0")
+    receipt_no = await next_receipt_number()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "receipt_no": receipt_no,
+        "type": "maintenance",
+        "block": flat["block"],
+        "flat_no": flat["flat_no"],
+        "owner_name": flat.get("owner_name", ""),
+        "phone": flat.get("phone", ""),
+        "bhk_type": flat["bhk_type"],
+        "mode": "test",
+        "months_covered": [],
+        "months_count": 0,
+        "rate": 0,
+        "maintenance_amount": 0,
+        "conveyance_amount": 0,
+        "late_fee_amount": 0,
+        "opening_due_amount": 0,
+        "total_amount": body.amount,
+        "upi_id": "",
+        "upi_ref_no": "",
+        "note": body.note,
+        "is_test": True,
+        "verified": False,
+        "status": "success",
+        "paid_at": datetime.now(timezone.utc).isoformat(),
+        "paid_date": today_str(),
+    }
+    await db.maintenance_payments.insert_one(doc.copy())
+    doc.pop("_id", None)
+    return {"receipt": doc}
+
+@api_router.post("/admin/test-reset")
+async def admin_test_reset(body: TestReset):
+    """Reset test data: either wipe payments for one flat, or wipe every payment tagged is_test."""
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    if body.scope == "all_test":
+        r1 = await db.maintenance_payments.delete_many({"is_test": True})
+        r2 = await db.amenity_bookings.delete_many({"is_test": True})
+        return {"ok": True, "deleted_maintenance": r1.deleted_count, "deleted_bookings": r2.deleted_count}
+    else:
+        if not body.block or not body.flat_no:
+            raise HTTPException(400, "block and flat_no required for scope=flat")
+        q = {"block": body.block.upper(), "flat_no": str(body.flat_no)}
+        r1 = await db.maintenance_payments.delete_many(q)
+        r2 = await db.amenity_bookings.delete_many(q)
+        return {"ok": True, "deleted_maintenance": r1.deleted_count, "deleted_bookings": r2.deleted_count}
+
+# -------- ADMIN: OPENING DUES --------
+@api_router.post("/admin/opening-due")
+async def set_opening_due(body: OpeningDueSet):
+    """Admin manually sets a flat's opening/historical due (pre-app balance)."""
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    flat = await get_flat(body.block, body.flat_no)
+    if not flat:
+        raise HTTPException(404, "Flat not registered")
+    if body.amount < 0:
+        raise HTTPException(400, "Amount cannot be negative")
+    await db.flats.update_one(
+        {"block": flat["block"], "flat_no": flat["flat_no"]},
+        {"$set": {"opening_due": body.amount}},
+    )
+    updated_flat = await get_flat(body.block, body.flat_no)
+    dues = await compute_dues(updated_flat)
+    return {"flat": updated_flat, "dues": dues}
+
+@api_router.get("/admin/opening-dues")
+async def list_opening_dues():
+    """List all flats with a non-zero opening due, for admin review."""
+    flats = await db.flats.find({"opening_due": {"$gt": 0}}, {"_id": 0}).to_list(1000)
+    out = []
+    for f in flats:
+        dues = await compute_dues(f)
+        out.append({"flat": f, "dues": dues})
+    return {"flats": out}
+
+# -------- ADMIN: FLAT MANAGEMENT --------
+@api_router.get("/admin/flats")
+async def list_flats():
+    flats = await db.flats.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return {"flats": flats}
+
+@api_router.post("/admin/flat/delete")
+async def delete_flat(body: FlatDelete):
+    """Fully remove a flat's registration and ALL its payment history (maintenance + amenities)."""
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    flat = await get_flat(body.block, body.flat_no)
+    if not flat:
+        raise HTTPException(404, "Flat not registered")
+    q = {"block": flat["block"], "flat_no": flat["flat_no"]}
+    r0 = await db.flats.delete_one(q)
+    r1 = await db.maintenance_payments.delete_many(q)
+    r2 = await db.amenity_bookings.delete_many(q)
+    return {
+        "ok": True,
+        "flat_deleted": r0.deleted_count > 0,
+        "deleted_maintenance": r1.deleted_count,
+        "deleted_bookings": r2.deleted_count,
+    }
+
+# -------- CORPORATE / BULK PAYER --------
+async def get_corporate(name: str) -> Optional[dict]:
+    return await db.corporate_payers.find_one({"name": name}, {"_id": 0})
+
+@api_router.post("/corporate/register")
+async def corporate_register(body: CorporateRegister):
+    existing = await get_corporate(body.name)
+    if existing:
+        raise HTTPException(400, "Corporate payer already registered. Please login.")
+    if not body.pin or len(body.pin) < 4:
+        raise HTTPException(400, "PIN must be at least 4 digits")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": body.name,
+        "pin": body.pin,
+        "flats": [f.dict() for f in body.flats],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.corporate_payers.insert_one(doc.copy())
+    doc.pop("_id", None)
+    doc.pop("pin", None)
+    return {"payer": doc}
+
+@api_router.post("/corporate/login")
+async def corporate_login(body: CorporateLogin):
+    payer = await get_corporate(body.name)
+    if not payer or payer.get("pin") != body.pin:
+        raise HTTPException(401, "Invalid name or PIN")
+    payer.pop("pin", None)
+    # Attach live dues for each registered flat
+    flats_with_dues = []
+    for entry in payer.get("flats", []):
+        flat = await get_flat(entry["block"], entry["flat_no"])
+        if flat:
+            dues = await compute_dues(flat)
+            flats_with_dues.append({"block": flat["block"], "flat_no": flat["flat_no"], "registered": True, "dues": dues})
+        else:
+            flats_with_dues.append({"block": entry["block"], "flat_no": entry["flat_no"], "registered": False, "dues": None})
+    payer["flats"] = flats_with_dues
+    return {"payer": payer}
+
+@api_router.post("/corporate/flats/add")
+async def corporate_add_flat(payer_id: str, block: str, flat_no: str, pin: str):
+    payer = await db.corporate_payers.find_one({"id": payer_id}, {"_id": 0})
+    if not payer or payer.get("pin") != pin:
+        raise HTTPException(401, "Invalid payer or PIN")
+    flats = payer.get("flats", [])
+    if not any(f["block"] == block.upper() and f["flat_no"] == str(flat_no) for f in flats):
+        flats.append({"block": block.upper(), "flat_no": str(flat_no)})
+        await db.corporate_payers.update_one({"id": payer_id}, {"$set": {"flats": flats}})
+    return {"ok": True, "flats": flats}
+
+@api_router.post("/corporate/pay")
+async def corporate_pay(body: CorporatePay):
+    payer = await db.corporate_payers.find_one({"id": body.payer_id}, {"_id": 0})
+    if not payer:
+        raise HTTPException(404, "Corporate payer not found")
+    if not body.entries:
+        raise HTTPException(400, "No flats/amounts provided")
+
+    # Validate ALL flats first (stop before any payment if any flat is invalid) — per requirement,
+    # each entered flat must exist / be checked for dues before proceeding.
+    validated = []
+    errors = []
+    for e in body.entries:
+        flat = await get_flat(e.block, e.flat_no)
+        if not flat:
+            errors.append(f"{e.block}-{e.flat_no}: not a registered flat")
+            continue
+        if e.amount <= 0:
+            errors.append(f"{e.block}-{e.flat_no}: amount must be greater than 0")
+            continue
+        dues = await compute_dues(flat)
+        validated.append({"flat": flat, "dues": dues, "amount": e.amount})
+    if errors:
+        raise HTTPException(400, {"message": "Fix the following before payment can proceed", "errors": errors})
+
+    # All valid — apply each payment against that flat's oldest pending months first
+    group_id = str(uuid.uuid4())
+    receipts = []
+    for item in validated:
+        flat, dues, amount = item["flat"], item["dues"], item["amount"]
+        rate = dues["rate"]
+        pending = dues["pending_months"]
+        months_affordable = int(amount // rate) if rate else 0
+        months_to_pay = pending[:months_affordable] if months_affordable > 0 else []
+        leftover = amount - (len(months_to_pay) * rate)
+
+        receipt_no = await next_receipt_number()
+        doc = {
+            "id": str(uuid.uuid4()),
+            "receipt_no": receipt_no,
+            "type": "maintenance",
+            "block": flat["block"],
+            "flat_no": flat["flat_no"],
+            "owner_name": flat.get("owner_name", ""),
+            "phone": flat.get("phone", ""),
+            "bhk_type": flat["bhk_type"],
+            "mode": "corporate",
+            "months_covered": months_to_pay,
+            "months_count": len(months_to_pay),
+            "rate": rate,
+            "maintenance_amount": len(months_to_pay) * rate,
+            "conveyance_amount": 0,
+            "late_fee_amount": 0,
+            "opening_due_amount": 0,
+            "leftover_credit": leftover,
+            "total_amount": amount,
+            "upi_id": body.upi_id or "",
+            "upi_ref_no": (body.txn_ref or "").strip(),
+            "corporate_payer_id": payer["id"],
+            "corporate_payer_name": payer["name"],
+            "corporate_group_id": group_id,
+            "verified": False,
+            "status": "success",
+            "paid_at": datetime.now(timezone.utc).isoformat(),
+            "paid_date": today_str(),
+        }
+        await db.maintenance_payments.insert_one(doc.copy())
+        doc.pop("_id", None)
+        receipts.append(doc)
+
+    return {"group_id": group_id, "receipts": receipts, "total_paid": sum(r["total_amount"] for r in receipts)}
 
 # -------- ADMIN --------
 @api_router.post("/admin/verify")
