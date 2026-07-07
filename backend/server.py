@@ -51,6 +51,7 @@ class FlatRegister(BaseModel):
     bhk_type: Literal["2BHK", "3BHK"]
     owner_name: Optional[str] = ""
     phone: Optional[str] = ""
+    email: Optional[str] = ""
     start_month: str
 
 class FlatLogin(BaseModel):
@@ -128,10 +129,12 @@ class TestReset(BaseModel):
 class CorporateFlatEntry(BaseModel):
     block: str
     flat_no: str
+    bhk_type: Literal["2BHK", "3BHK"] = "2BHK"
 
 class CorporateRegister(BaseModel):
     name: str
     pin: str
+    email: Optional[str] = ""
     flats: List[CorporateFlatEntry] = []
 
 class CorporateLogin(BaseModel):
@@ -142,12 +145,32 @@ class CorporatePayEntry(BaseModel):
     block: str
     flat_no: str
     amount: float
+    purpose: Literal["maintenance", "conveyance"] = "maintenance"
 
 class CorporatePay(BaseModel):
     payer_id: str
     entries: List[CorporatePayEntry]
     txn_ref: Optional[str] = ""
     upi_id: Optional[str] = ""
+
+class GatePassRequest(BaseModel):
+    block: str
+    flat_no: str
+    conveyance_receipt_no: str
+    requested_by: Literal["individual", "corporate"] = "individual"
+    corporate_payer_id: Optional[str] = None
+
+class GatePassAction(BaseModel):
+    pass_id: str
+    pin: str
+    reason: Optional[str] = ""
+
+class RecoveryRequest(BaseModel):
+    account_type: Literal["individual", "corporate"]
+    email: str
+    block: Optional[str] = None
+    flat_no: Optional[str] = None
+    name: Optional[str] = None
 
 # ---------------- HELPERS ----------------
 def month_range(start_ym: str, end_ym: str) -> List[str]:
@@ -172,11 +195,50 @@ def today_str() -> str:
 async def get_flat(block: str, flat_no: str) -> Optional[dict]:
     return await db.flats.find_one({"block": block.upper(), "flat_no": str(flat_no)}, {"_id": 0})
 
+async def get_or_create_corporate_flat(block: str, flat_no: str, bhk_type: str, payer: dict) -> dict:
+    """Corporate coverage is independent of individual registration. If the flat doesn't
+    exist yet, auto-create a minimal record (no owner_name/phone) so dues can be tracked and
+    paid against it. If it already exists (an individual may have registered it, or another
+    corporate call already created it), just mark it as corporate-covered."""
+    existing = await get_flat(block, flat_no)
+    if existing:
+        await db.flats.update_one(
+            {"block": existing["block"], "flat_no": existing["flat_no"]},
+            {"$set": {
+                "corporate_covered": True,
+                "corporate_payer_id": payer["id"],
+                "corporate_payer_name": payer["name"],
+            }},
+        )
+        return await get_flat(block, flat_no)
+    now = datetime.now(timezone.utc)
+    start_month = f"{now.year}-{str(now.month).zfill(2)}"
+    flat = {
+        "id": str(uuid.uuid4()),
+        "block": block.upper(),
+        "flat_no": str(flat_no),
+        "bhk_type": bhk_type,
+        "owner_name": "",
+        "phone": "",
+        "start_month": start_month,
+        "corporate_covered": True,
+        "corporate_payer_id": payer["id"],
+        "corporate_payer_name": payer["name"],
+        "auto_created": True,
+        "created_at": now.isoformat(),
+    }
+    await db.flats.insert_one(flat.copy())
+    return await get_flat(block, flat_no)
+
 async def get_late_fee() -> int:
-    doc = await db.admin_settings.find_one({"key": "late_fee"}, {"_id": 0})
-    if not doc:
-        return LATE_FEE_DEFAULT
-    return int(doc.get("value", LATE_FEE_DEFAULT))
+    return LATE_FEE_DEFAULT
+
+def require_txn_ref(ref: Optional[str]):
+    if not (ref or "").strip():
+        raise HTTPException(400, "UPI reference number or bank transaction number is required.")
+
+def normalize_email(email: Optional[str]) -> str:
+    return (email or "").strip().lower()
 
 async def compute_dues(flat: dict) -> dict:
     start = flat["start_month"]
@@ -300,6 +362,21 @@ async def register(body: FlatRegister):
         raise HTTPException(400, "Invalid block. Use A, B, C, D or F.")
     existing = await get_flat(body.block, body.flat_no)
     if existing:
+        if existing.get("auto_created"):
+            # This flat was pre-created by a corporate payer (e.g. school covering staff quarters).
+            # A real resident is now completing their own profile on top of it.
+            await db.flats.update_one(
+                {"block": existing["block"], "flat_no": existing["flat_no"]},
+                {"$set": {
+                    "owner_name": body.owner_name or existing.get("owner_name", ""),
+                    "phone": body.phone or existing.get("phone", ""),
+                    "email": normalize_email(body.email) or existing.get("email", ""),
+                    "auto_created": False,
+                }},
+            )
+            updated = await get_flat(body.block, body.flat_no)
+            dues = await compute_dues(updated)
+            return {"exists": True, "flat": updated, "dues": dues}
         raise HTTPException(400, "Flat already registered. Please login.")
     flat = {
         "id": str(uuid.uuid4()),
@@ -308,7 +385,12 @@ async def register(body: FlatRegister):
         "bhk_type": body.bhk_type,
         "owner_name": body.owner_name or "",
         "phone": body.phone or "",
+        "email": normalize_email(body.email),
         "start_month": body.start_month,
+        "corporate_covered": False,
+        "corporate_payer_id": None,
+        "corporate_payer_name": None,
+        "auto_created": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.flats.insert_one(flat.copy())
@@ -325,6 +407,7 @@ async def get_dues(block: str, flat_no: str):
 
 @api_router.post("/maintenance/pay")
 async def pay_maintenance(body: PayMaintenance):
+    require_txn_ref(body.upi_ref_no)
     flat = await get_flat(body.block, body.flat_no)
     if not flat:
         raise HTTPException(404, "Flat not registered")
@@ -388,6 +471,7 @@ async def pay_maintenance(body: PayMaintenance):
 
 @api_router.post("/amenity/gym")
 async def book_gym(body: BookGym):
+    require_txn_ref(body.upi_ref_no)
     flat = await get_flat(body.block, body.flat_no)
     if not flat:
         raise HTTPException(404, "Flat not registered")
@@ -427,6 +511,7 @@ async def book_gym(body: BookGym):
 
 @api_router.post("/amenity/pool")
 async def book_pool(body: BookPool):
+    require_txn_ref(body.upi_ref_no)
     flat = await get_flat(body.block, body.flat_no)
     if not flat:
         raise HTTPException(404, "Flat not registered")
@@ -653,6 +738,22 @@ async def admin_verify_payment(body: VerifyPayment):
         r2 = await db.amenity_bookings.update_one({"receipt_no": body.receipt_no}, {"$set": upd})
         if r2.matched_count == 0:
             raise HTTPException(404, "Receipt not found")
+    rec = await db.maintenance_payments.find_one({"receipt_no": body.receipt_no}, {"_id": 0})
+    if not rec:
+        rec = await db.amenity_bookings.find_one({"receipt_no": body.receipt_no}, {"_id": 0})
+    if body.verified and rec:
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "type": "payment_verified",
+            "receipt_no": body.receipt_no,
+            "block": rec.get("block"),
+            "flat_no": rec.get("flat_no"),
+            "corporate_payer_id": rec.get("corporate_payer_id"),
+            "title": "Payment verified",
+            "message": f"Receipt {body.receipt_no} has been verified by the committee.",
+            "read": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
     return {"ok": True, "verified": body.verified}
 
 # -------- ADMIN: TEST TOOLS --------
@@ -784,10 +885,14 @@ async def corporate_register(body: CorporateRegister):
         "id": str(uuid.uuid4()),
         "name": body.name,
         "pin": body.pin,
-        "flats": [f.dict() for f in body.flats],
+        "email": normalize_email(body.email),
+        "flats": [{"block": f.block.upper(), "flat_no": str(f.flat_no)} for f in body.flats],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.corporate_payers.insert_one(doc.copy())
+    # Independent of individual registration — auto-create/tag each covered flat now.
+    for f in body.flats:
+        await get_or_create_corporate_flat(f.block, f.flat_no, f.bhk_type, doc)
     doc.pop("_id", None)
     doc.pop("pin", None)
     return {"payer": doc}
@@ -798,7 +903,7 @@ async def corporate_login(body: CorporateLogin):
     if not payer or payer.get("pin") != body.pin:
         raise HTTPException(401, "Invalid name or PIN")
     payer.pop("pin", None)
-    # Attach live dues for each registered flat
+    # These flats always exist now (auto-created on add), so dues are always available.
     flats_with_dues = []
     for entry in payer.get("flats", []):
         flat = await get_flat(entry["block"], entry["flat_no"])
@@ -811,14 +916,19 @@ async def corporate_login(body: CorporateLogin):
     return {"payer": payer}
 
 @api_router.post("/corporate/flats/add")
-async def corporate_add_flat(payer_id: str, block: str, flat_no: str, pin: str):
+async def corporate_add_flat(payer_id: str, block: str, flat_no: str, pin: str, bhk_type: str = "2BHK"):
     payer = await db.corporate_payers.find_one({"id": payer_id}, {"_id": 0})
     if not payer or payer.get("pin") != pin:
         raise HTTPException(401, "Invalid payer or PIN")
+    if bhk_type not in ("2BHK", "3BHK"):
+        bhk_type = "2BHK"
     flats = payer.get("flats", [])
     if not any(f["block"] == block.upper() and f["flat_no"] == str(flat_no) for f in flats):
         flats.append({"block": block.upper(), "flat_no": str(flat_no)})
         await db.corporate_payers.update_one({"id": payer_id}, {"$set": {"flats": flats}})
+    # Independent of individual registration — this flat now exists and is marked corporate-covered,
+    # regardless of whether any resident has ever logged into the app for it.
+    await get_or_create_corporate_flat(block, flat_no, bhk_type, payer)
     return {"ok": True, "flats": flats}
 
 @api_router.post("/corporate/pay")
@@ -828,40 +938,52 @@ async def corporate_pay(body: CorporatePay):
         raise HTTPException(404, "Corporate payer not found")
     if not body.entries:
         raise HTTPException(400, "No flats/amounts provided")
+    require_txn_ref(body.txn_ref)
 
-    # Validate ALL flats first (stop before any payment if any flat is invalid) — per requirement,
-    # each entered flat must exist / be checked for dues before proceeding.
+    # Validate ALL entries first (stop before any payment if any flat is invalid). Since coverage
+    # is independent of individual registration, a flat "not found" here only means it was never
+    # added via /corporate/flats/add for this payer — not that the resident must register first.
+    covered = {(f["block"], f["flat_no"]) for f in payer.get("flats", [])}
     validated = []
     errors = []
     for e in body.entries:
+        if (e.block.upper(), str(e.flat_no)) not in covered:
+            errors.append(f"{e.block}-{e.flat_no}: not in your covered flats list — add it first")
+            continue
         flat = await get_flat(e.block, e.flat_no)
         if not flat:
-            errors.append(f"{e.block}-{e.flat_no}: not a registered flat")
+            errors.append(f"{e.block}-{e.flat_no}: flat record missing — re-add it to your covered list")
             continue
         if e.amount <= 0:
             errors.append(f"{e.block}-{e.flat_no}: amount must be greater than 0")
             continue
         dues = await compute_dues(flat)
-        validated.append({"flat": flat, "dues": dues, "amount": e.amount})
+        validated.append({"flat": flat, "dues": dues, "amount": e.amount, "purpose": e.purpose})
     if errors:
         raise HTTPException(400, {"message": "Fix the following before payment can proceed", "errors": errors})
 
-    # All valid — apply each payment against that flat's oldest pending months first
     group_id = str(uuid.uuid4())
     receipts = []
     for item in validated:
-        flat, dues, amount = item["flat"], item["dues"], item["amount"]
-        rate = dues["rate"]
-        pending = dues["pending_months"]
-        months_affordable = int(amount // rate) if rate else 0
-        months_to_pay = pending[:months_affordable] if months_affordable > 0 else []
-        leftover = amount - (len(months_to_pay) * rate)
-
+        flat, dues, amount, purpose = item["flat"], item["dues"], item["amount"], item["purpose"]
         receipt_no = await next_receipt_number()
+
+        if purpose == "conveyance":
+            months_to_pay, rate, maint_amt, leftover = [], 0, 0, 0
+            conveyance_amt = amount
+        else:
+            rate = dues["rate"]
+            pending = dues["pending_months"]
+            months_affordable = int(amount // rate) if rate else 0
+            months_to_pay = pending[:months_affordable] if months_affordable > 0 else []
+            leftover = amount - (len(months_to_pay) * rate)
+            maint_amt = len(months_to_pay) * rate
+            conveyance_amt = 0
+
         doc = {
             "id": str(uuid.uuid4()),
             "receipt_no": receipt_no,
-            "type": "maintenance",
+            "type": "maintenance" if purpose == "maintenance" else "conveyance",
             "block": flat["block"],
             "flat_no": flat["flat_no"],
             "owner_name": flat.get("owner_name", ""),
@@ -871,8 +993,8 @@ async def corporate_pay(body: CorporatePay):
             "months_covered": months_to_pay,
             "months_count": len(months_to_pay),
             "rate": rate,
-            "maintenance_amount": len(months_to_pay) * rate,
-            "conveyance_amount": 0,
+            "maintenance_amount": maint_amt,
+            "conveyance_amount": conveyance_amt,
             "late_fee_amount": 0,
             "opening_due_amount": 0,
             "leftover_credit": leftover,
@@ -892,6 +1014,84 @@ async def corporate_pay(body: CorporatePay):
         receipts.append(doc)
 
     return {"group_id": group_id, "receipts": receipts, "total_paid": sum(r["total_amount"] for r in receipts)}
+
+# -------- GATE PASS (move-out flow) --------
+@api_router.post("/gatepass/request")
+async def request_gate_pass(body: GatePassRequest):
+    flat = await get_flat(body.block, body.flat_no)
+    if not flat:
+        raise HTTPException(404, "Flat not registered")
+    dues = await compute_dues(flat)
+    if dues["has_any_due"]:
+        raise HTTPException(400, "Clear all outstanding dues before requesting a gate pass.")
+    receipt = await db.maintenance_payments.find_one(
+        {"receipt_no": body.conveyance_receipt_no, "block": flat["block"], "flat_no": flat["flat_no"]}, {"_id": 0}
+    )
+    if not receipt or (receipt.get("conveyance_amount", 0) or 0) <= 0:
+        raise HTTPException(400, "Provide a valid conveyance payment receipt for this flat before requesting a pass.")
+    existing_pending = await db.gate_passes.find_one(
+        {"block": flat["block"], "flat_no": flat["flat_no"], "status": "pending"}, {"_id": 0}
+    )
+    if existing_pending:
+        raise HTTPException(400, "A gate pass request is already pending for this flat.")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "block": flat["block"],
+        "flat_no": flat["flat_no"],
+        "owner_name": flat.get("owner_name", ""),
+        "conveyance_receipt_no": body.conveyance_receipt_no,
+        "requested_by": body.requested_by,
+        "corporate_payer_id": body.corporate_payer_id,
+        "status": "pending",
+        "pass_number": None,
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "approved_at": None,
+        "rejected_reason": None,
+    }
+    await db.gate_passes.insert_one(doc.copy())
+    doc.pop("_id", None)
+    return {"gate_pass": doc}
+
+@api_router.get("/gatepass/status/{block}/{flat_no}")
+async def gate_pass_status(block: str, flat_no: str):
+    docs = await db.gate_passes.find(
+        {"block": block.upper(), "flat_no": str(flat_no)}, {"_id": 0}
+    ).sort("requested_at", -1).to_list(1)
+    return {"gate_pass": docs[0] if docs else None}
+
+@api_router.get("/admin/gatepasses")
+async def list_gate_passes():
+    docs = await db.gate_passes.find({}, {"_id": 0}).sort("requested_at", -1).to_list(500)
+    return {"gate_passes": docs}
+
+@api_router.post("/admin/gatepass/approve")
+async def approve_gate_pass(body: GatePassAction):
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    gp = await db.gate_passes.find_one({"id": body.pass_id}, {"_id": 0})
+    if not gp:
+        raise HTTPException(404, "Gate pass request not found")
+    pass_number = f"GP-{datetime.now(timezone.utc).strftime('%y%m%d')}-{gp['block']}{gp['flat_no']}"
+    await db.gate_passes.update_one(
+        {"id": body.pass_id},
+        {"$set": {"status": "approved", "pass_number": pass_number, "approved_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    updated = await db.gate_passes.find_one({"id": body.pass_id}, {"_id": 0})
+    return {"gate_pass": updated}
+
+@api_router.post("/admin/gatepass/reject")
+async def reject_gate_pass(body: GatePassAction):
+    if body.pin != ADMIN_PIN:
+        raise HTTPException(401, "Invalid PIN")
+    gp = await db.gate_passes.find_one({"id": body.pass_id}, {"_id": 0})
+    if not gp:
+        raise HTTPException(404, "Gate pass request not found")
+    await db.gate_passes.update_one(
+        {"id": body.pass_id},
+        {"$set": {"status": "rejected", "rejected_reason": body.reason or "Not specified"}},
+    )
+    updated = await db.gate_passes.find_one({"id": body.pass_id}, {"_id": 0})
+    return {"gate_pass": updated}
 
 # -------- ADMIN --------
 @api_router.post("/admin/verify")
@@ -942,14 +1142,36 @@ async def get_admin_late_fee():
 async def set_admin_late_fee(body: LateFeeUpdate):
     if body.pin != ADMIN_PIN:
         raise HTTPException(401, "Invalid PIN")
-    if body.late_fee < 0:
-        raise HTTPException(400, "Invalid late fee")
-    await db.admin_settings.update_one(
-        {"key": "late_fee"},
-        {"$set": {"value": body.late_fee, "updated_at": datetime.now(timezone.utc).isoformat()}},
-        upsert=True,
-    )
-    return {"late_fee": body.late_fee}
+    raise HTTPException(403, f"Late fee is fixed at {LATE_FEE_DEFAULT} after the {DUE_DAY}th and cannot be changed.")
+
+@api_router.post("/auth/recovery/request")
+async def request_recovery(body: RecoveryRequest):
+    email = normalize_email(body.email)
+    if not email:
+        raise HTTPException(400, "Registered email is required.")
+    if body.account_type == "individual":
+        if not body.block or not body.flat_no:
+            raise HTTPException(400, "Block and flat number are required.")
+        account = await get_flat(body.block, body.flat_no)
+        account_id = account.get("id") if account and normalize_email(account.get("email")) == email else None
+    else:
+        if not body.name:
+            raise HTTPException(400, "Corporate name is required.")
+        account = await get_corporate(body.name)
+        account_id = account.get("id") if account and normalize_email(account.get("email")) == email else None
+    if account_id:
+        await db.recovery_requests.insert_one({
+            "id": str(uuid.uuid4()),
+            "account_type": body.account_type,
+            "account_id": account_id,
+            "email": email,
+            "status": "pending_committee_action",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    return {
+        "ok": True,
+        "message": "If the email matches our records, the committee will contact you to reset access securely.",
+    }
 
 @api_router.get("/admin/payments")
 async def all_payments(date_filter: Optional[str] = None):

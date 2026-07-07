@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
-import { getSession, clearSession, Session } from "@/src/session";
+import { getSession, saveSession, clearSession, Session } from "@/src/session";
 import { BrandLogo } from "@/src/components/BrandLogo";
 
 export default function Home() {
@@ -23,6 +23,13 @@ export default function Home() {
       const r = await fetch(`${API}/dues/${s.block}/${s.flat_no}`);
       const d = await r.json();
       setDues(d.dues);
+      // Corporate coverage can be added by a bulk payer even after a resident has already
+      // registered — re-sync it here so the conveyance option hides/shows correctly.
+      if (d.flat && !!d.flat.corporate_covered !== !!s.corporate_covered) {
+        const updated = { ...s, corporate_covered: !!d.flat.corporate_covered, corporate_payer_name: d.flat.corporate_payer_name || null };
+        await saveSession(updated);
+        setSession(updated);
+      }
     } catch {}
     setLoading(false); setRefreshing(false);
   }, []);
@@ -141,28 +148,55 @@ export default function Home() {
           </View>
         </Pressable>
 
-        <Pressable
-          testID="conveyance-card"
-          onPress={() => router.push({ pathname: "/pay", params: { purpose: "conveyance", amount: "250", mode: "full", include_conveyance: "1" } })}
-          style={({ pressed }) => [styles.heroCard, pressed && { opacity: 0.9 }]}
-        >
-          <LinearGradient
-            colors={["#12201a", "#0A0A0A"]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.heroInner}>
-            <View style={styles.heroIcon}>
-              <Ionicons name="swap-horizontal-outline" size={26} color={COLORS.brand} />
+        {!session.corporate_covered && (
+          <Pressable
+            testID="conveyance-card"
+            onPress={() => router.push({ pathname: "/pay", params: { purpose: "conveyance", amount: "250", mode: "full", include_conveyance: "1" } })}
+            style={({ pressed }) => [styles.heroCard, pressed && { opacity: 0.9 }]}
+          >
+            <LinearGradient
+              colors={["#12201a", "#0A0A0A"]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.heroInner}>
+              <View style={styles.heroIcon}>
+                <Ionicons name="swap-horizontal-outline" size={26} color={COLORS.brand} />
+              </View>
+              <Text style={styles.heroTitle}>Conveyance</Text>
+              <Text style={styles.heroSub}>One-time move-in / move-out charge · ₹250</Text>
+              <View style={styles.heroCta}>
+                <Text style={styles.heroCtaText}>PAY NOW</Text>
+                <Ionicons name="arrow-forward" size={16} color={COLORS.brand} />
+              </View>
             </View>
-            <Text style={styles.heroTitle}>Conveyance</Text>
-            <Text style={styles.heroSub}>One-time move-in / move-out charge · ₹250</Text>
-            <View style={styles.heroCta}>
-              <Text style={styles.heroCtaText}>PAY NOW</Text>
-              <Ionicons name="arrow-forward" size={16} color={COLORS.brand} />
-            </View>
+          </Pressable>
+        )}
+
+        {session.corporate_covered && (
+          <View style={styles.corpNotice} testID="corporate-covered-notice">
+            <Ionicons name="business-outline" size={18} color={COLORS.brand} />
+            <Text style={styles.corpNoticeText}>
+              Conveyance and gate pass for this flat are handled by{" "}
+              <Text style={{ color: COLORS.brand, fontWeight: "700" }}>
+                {session.corporate_payer_name || "your organization"}
+              </Text>
+              , not paid individually here.
+            </Text>
           </View>
-        </Pressable>
+        )}
+
+        {!session.corporate_covered && (
+          <Pressable
+            testID="gatepass-link"
+            onPress={() => router.push("/gatepass")}
+            style={styles.secondaryRow}
+          >
+            <Ionicons name="exit-outline" size={18} color={COLORS.brand} />
+            <Text style={styles.secondaryText}>Moving Out? Request Gate Pass</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
+          </Pressable>
+        )}
 
         <Pressable
           testID="history-link"
@@ -237,4 +271,10 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   secondaryText: { color: COLORS.onSurface, fontFamily: FONTS.sans, fontSize: 15 },
+  corpNotice: {
+    flexDirection: "row", gap: SPACING.md, alignItems: "flex-start",
+    backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.md, padding: SPACING.lg, marginBottom: SPACING.lg,
+  },
+  corpNoticeText: { flex: 1, color: COLORS.onSurfaceTertiary, fontSize: 13, fontFamily: FONTS.sans, lineHeight: 19 },
 });

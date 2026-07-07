@@ -8,7 +8,10 @@ export type Session = {
   bhk_type: "2BHK" | "3BHK";
   owner_name?: string;
   phone?: string;
+  email?: string;
   start_month: string;
+  corporate_covered?: boolean;
+  corporate_payer_name?: string | null;
 };
 
 export async function saveSession(s: Session) {

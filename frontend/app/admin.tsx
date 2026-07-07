@@ -22,7 +22,27 @@ export default function Admin() {
   const [startNum, setStartNum] = useState("101");
   const [endNum, setEndNum] = useState("200");
 
-  const [tab, setTab] = useState<"today" | "all" | "series" | "settings">("today");
+  const [tab, setTab] = useState<"today" | "all" | "series" | "settings" | "tools" | "flats" | "gatepass">("today");
+  const [gatePasses, setGatePasses] = useState<any[]>([]);
+
+  // Tools tab state
+  const [testBlock, setTestBlock] = useState("A");
+  const [testFlatNo, setTestFlatNo] = useState("");
+  const [testAmount, setTestAmount] = useState("1");
+  const [testNote, setTestNote] = useState("Admin Test Payment");
+  const [resetBlock, setResetBlock] = useState("A");
+  const [resetFlatNo, setResetFlatNo] = useState("");
+
+  // Flats tab state
+  const [flatsList, setFlatsList] = useState<any[]>([]);
+  const [odBlock, setOdBlock] = useState("A");
+  const [odFlatNo, setOdFlatNo] = useState("");
+  const [odAmount, setOdAmount] = useState("");
+  const [qrBlock, setQrBlock] = useState("A");
+  const [qrFlatNo, setQrFlatNo] = useState("");
+  const [qrBhk, setQrBhk] = useState<"2BHK" | "3BHK">("2BHK");
+  const [qrOwnerName, setQrOwnerName] = useState("");
+  const [qrPhone, setQrPhone] = useState("");
 
   const verify = async () => {
     if (!pin.trim()) return;
@@ -42,17 +62,53 @@ export default function Admin() {
   };
 
   const loadAll = async () => {
-    const [r1, r2, r3, r4] = await Promise.all([
+    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
       fetch(`${API}/admin/series`),
       fetch(`${API}/admin/payments`),
       fetch(`${API}/admin/payments/today`),
       fetch(`${API}/admin/late-fee`),
+      fetch(`${API}/admin/flats`),
+      fetch(`${API}/admin/gatepasses`),
     ]);
     setSeriesList((await r1.json()).series || []);
     setAllPayments(await r2.json());
     setTodayPayments(await r3.json());
     const lf = await r4.json();
     setLateFee(String(lf.late_fee));
+    setFlatsList((await r5.json()).flats || []);
+    setGatePasses((await r6.json()).gate_passes || []);
+  };
+
+  const approveGatePass = async (pass_id: string) => {
+    try {
+      const r = await fetch(`${API}/admin/gatepass/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pass_id, pin }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Failed");
+      Alert.alert("Approved", `Pass ${d.gate_pass.pass_number} issued. Reminder: deactivate this flat's login the day after move-out (Flats tab → delete).`);
+      loadAll();
+    } catch (e: any) { Alert.alert("Error", e.message); }
+  };
+
+  const rejectGatePass = async (pass_id: string) => {
+    Alert.alert("Reject Request", "Are you sure you want to reject this gate pass request?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reject", style: "destructive", onPress: async () => {
+          try {
+            const r = await fetch(`${API}/admin/gatepass/reject`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pass_id, pin, reason: "Rejected by committee" }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || "Failed");
+            loadAll();
+          } catch (e: any) { Alert.alert("Error", e.message); }
+        }
+      },
+    ]);
   };
 
   const addSeries = async () => {
@@ -88,6 +144,10 @@ export default function Admin() {
   };
 
   const saveLateFee = async () => {
+    if (lateFee) {
+      Alert.alert("Fixed Rule", "Late fee is fixed by policy and applies automatically after the 15th. It cannot be changed from the app.");
+      return;
+    }
     const v = parseInt(lateFee);
     if (isNaN(v) || v < 0) return Alert.alert("Invalid", "Enter a valid amount");
     try {
@@ -104,6 +164,154 @@ export default function Admin() {
 
   const exportAll = () => Linking.openURL(`${API}/admin/export?pin=${encodeURIComponent(pin)}`);
   const exportToday = () => Linking.openURL(`${API}/admin/export/today?pin=${encodeURIComponent(pin)}`);
+
+  const runTestPayment = async () => {
+    const amt = parseFloat(testAmount);
+    if (!testFlatNo.trim() || isNaN(amt) || amt <= 0) {
+      return Alert.alert("Invalid", "Enter block, flat number, and a valid amount.");
+    }
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/admin/test-payment`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ block: testBlock, flat_no: testFlatNo.trim(), amount: amt, note: testNote, pin }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Failed");
+      Alert.alert("Test Payment Recorded", `Receipt ${d.receipt.receipt_no} · ₹${amt} for ${testBlock}-${testFlatNo}`);
+      setTestFlatNo("");
+      loadAll();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally { setLoading(false); }
+  };
+
+  const runResetFlat = async () => {
+    if (!resetFlatNo.trim()) return Alert.alert("Invalid", "Enter block and flat number.");
+    Alert.alert(
+      "Reset Test Data",
+      `This deletes ALL maintenance + amenity records for ${resetBlock}-${resetFlatNo}. This cannot be undone. Continue?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            setLoading(true);
+            try {
+              const r = await fetch(`${API}/admin/test-reset`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pin, scope: "flat", block: resetBlock, flat_no: resetFlatNo.trim() }),
+              });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.detail || "Failed");
+              Alert.alert("Reset Done", `Removed ${d.deleted_maintenance} maintenance + ${d.deleted_bookings} booking records.`);
+              setResetFlatNo("");
+              loadAll();
+            } catch (e: any) {
+              Alert.alert("Error", e.message);
+            } finally { setLoading(false); }
+          }
+        },
+      ]
+    );
+  };
+
+  const runResetAllTest = async () => {
+    Alert.alert(
+      "Reset ALL Test Payments",
+      "This deletes every payment/booking across all flats that's tagged as TEST. Real resident payments are untouched. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete All Test", style: "destructive", onPress: async () => {
+            setLoading(true);
+            try {
+              const r = await fetch(`${API}/admin/test-reset`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pin, scope: "all_test" }),
+              });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.detail || "Failed");
+              Alert.alert("Reset Done", `Removed ${d.deleted_maintenance} maintenance + ${d.deleted_bookings} test records.`);
+              loadAll();
+            } catch (e: any) {
+              Alert.alert("Error", e.message);
+            } finally { setLoading(false); }
+          }
+        },
+      ]
+    );
+  };
+
+  const quickRegisterFlat = async () => {
+    if (!qrFlatNo.trim()) return Alert.alert("Invalid", "Enter a flat number.");
+    setLoading(true);
+    try {
+      const now = new Date();
+      const startMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const r = await fetch(`${API}/auth/register`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          block: qrBlock, flat_no: qrFlatNo.trim(), bhk_type: qrBhk,
+          owner_name: qrOwnerName.trim(), phone: qrPhone.trim(), start_month: startMonth,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Registration failed");
+      Alert.alert("Flat Registered", `${qrBlock}-${qrFlatNo} added. It can now be used for corporate/bulk payments even before the resident logs in themselves.`);
+      setQrFlatNo(""); setQrOwnerName(""); setQrPhone("");
+      loadAll();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally { setLoading(false); }
+  };
+
+  const saveOpeningDue = async () => {
+    const amt = parseFloat(odAmount);
+    if (!odFlatNo.trim() || isNaN(amt) || amt < 0) {
+      return Alert.alert("Invalid", "Enter block, flat number, and a valid amount.");
+    }
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/admin/opening-due`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ block: odBlock, flat_no: odFlatNo.trim(), amount: amt, pin }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Failed");
+      Alert.alert("Opening Due Saved", `${odBlock}-${odFlatNo}: ₹${amt.toLocaleString("en-IN")}`);
+      setOdFlatNo(""); setOdAmount("");
+      loadAll();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally { setLoading(false); }
+  };
+
+  const deleteFlat = async (block: string, flat_no: string) => {
+    Alert.alert(
+      "Delete Flat",
+      `This permanently deletes ${block}-${flat_no}'s registration AND all its payment/booking history. This cannot be undone. Continue?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Everything", style: "destructive", onPress: async () => {
+            setLoading(true);
+            try {
+              const r = await fetch(`${API}/admin/flat/delete`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ block, flat_no, pin }),
+              });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.detail || "Failed");
+              Alert.alert("Deleted", `${block}-${flat_no} removed. New owner can now register fresh.`);
+              loadAll();
+            } catch (e: any) {
+              Alert.alert("Error", e.message);
+            } finally { setLoading(false); }
+          }
+        },
+      ]
+    );
+  };
 
   if (!authed) {
     return (
@@ -174,6 +382,11 @@ export default function Admin() {
           <TabBtn label="All" active={tab === "all"} onPress={() => setTab("all")} testID="all-tab" />
           <TabBtn label="Series" active={tab === "series"} onPress={() => setTab("series")} testID="series-tab" />
           <TabBtn label="Settings" active={tab === "settings"} onPress={() => setTab("settings")} testID="settings-tab" />
+        </View>
+        <View style={[styles.tabs, { marginTop: SPACING.sm }]}>
+          <TabBtn label="Tools" active={tab === "tools"} onPress={() => setTab("tools")} testID="tools-tab" />
+          <TabBtn label="Flats" active={tab === "flats"} onPress={() => setTab("flats")} testID="flats-tab" />
+          <TabBtn label="Gate Pass" active={tab === "gatepass"} onPress={() => setTab("gatepass")} testID="gatepass-tab" />
         </View>
       </View>
 
@@ -314,9 +527,9 @@ export default function Admin() {
               <TextInput
                 testID="late-fee-input"
                 value={lateFee}
-                onChangeText={setLateFee}
+                editable={false}
                 keyboardType="number-pad"
-                style={styles.input}
+                style={[styles.input, { opacity: 0.7 }]}
                 returnKeyType="done"
               />
               <Text style={styles.pinHint}>
@@ -327,6 +540,209 @@ export default function Admin() {
               </Pressable>
             </View>
           </>
+        )}
+
+        {tab === "tools" && (
+          <View testID="tools-panel">
+            <Text style={styles.sectionLabel}>TEST PAYMENT (any amount, e.g. ₹1)</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.formLabel}>Block</Text>
+              <View style={{ flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md }}>
+                {["A", "B", "C", "D", "F"].map(b => (
+                  <Pressable
+                    key={b}
+                    testID={`test-block-${b}`}
+                    onPress={() => setTestBlock(b)}
+                    style={[styles.blockPill, testBlock === b && styles.blockPillActive]}
+                  >
+                    <Text style={[styles.blockPillText, testBlock === b && styles.blockPillTextActive]}>{b}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.formLabel}>Flat No</Text>
+              <TextInput testID="test-flat-input" value={testFlatNo} onChangeText={setTestFlatNo} style={styles.input} placeholder="e.g. 101" placeholderTextColor={COLORS.muted} />
+              <Text style={[styles.formLabel, { marginTop: SPACING.md }]}>Amount (₹)</Text>
+              <TextInput testID="test-amount-input" value={testAmount} onChangeText={setTestAmount} keyboardType="decimal-pad" style={styles.input} placeholder="1" placeholderTextColor={COLORS.muted} />
+              <Text style={[styles.formLabel, { marginTop: SPACING.md }]}>Note</Text>
+              <TextInput testID="test-note-input" value={testNote} onChangeText={setTestNote} style={styles.input} />
+              <Pressable testID="run-test-payment-btn" onPress={runTestPayment} style={styles.primaryBtn} disabled={loading}>
+                {loading ? <ActivityIndicator color={COLORS.onBrand} /> : <Text style={styles.primaryBtnText}>Record Test Payment</Text>}
+              </Pressable>
+              <Text style={styles.pinHint}>Use this to test real UPI links with a small amount instead of full dues.</Text>
+            </View>
+
+            <Text style={styles.sectionLabel}>RESET TEST DATA — SINGLE FLAT</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.formLabel}>Block</Text>
+              <View style={{ flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md }}>
+                {["A", "B", "C", "D", "F"].map(b => (
+                  <Pressable
+                    key={b}
+                    testID={`reset-block-${b}`}
+                    onPress={() => setResetBlock(b)}
+                    style={[styles.blockPill, resetBlock === b && styles.blockPillActive]}
+                  >
+                    <Text style={[styles.blockPillText, resetBlock === b && styles.blockPillTextActive]}>{b}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.formLabel}>Flat No</Text>
+              <TextInput testID="reset-flat-input" value={resetFlatNo} onChangeText={setResetFlatNo} style={styles.input} placeholder="e.g. 101" placeholderTextColor={COLORS.muted} />
+              <Pressable testID="run-reset-flat-btn" onPress={runResetFlat} style={[styles.primaryBtn, { backgroundColor: COLORS.error }]} disabled={loading}>
+                <Text style={styles.primaryBtnText}>Delete This Flat&apos;s Payments</Text>
+              </Pressable>
+              <Text style={styles.pinHint}>Wipes maintenance + amenity records for one flat so you can retest the same login.</Text>
+            </View>
+
+            <Text style={styles.sectionLabel}>RESET ALL TEST-TAGGED PAYMENTS</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.pinHint}>
+                Deletes every payment across every flat that&apos;s tagged as TEST (from the tool above). Does not touch real resident payments.
+              </Text>
+              <Pressable testID="run-reset-all-test-btn" onPress={runResetAllTest} style={[styles.primaryBtn, { backgroundColor: COLORS.error }]} disabled={loading}>
+                <Text style={styles.primaryBtnText}>Clear All Test Payments</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {tab === "flats" && (
+          <View testID="flats-panel">
+            <Text style={styles.sectionLabel}>QUICK-REGISTER A FLAT</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.pinHint}>
+                For flats no individual resident has logged into the app yet (e.g. staff units a corporate payer covers). Owner name/phone are optional here.
+              </Text>
+              <Text style={[styles.formLabel, { marginTop: SPACING.md }]}>Block</Text>
+              <View style={{ flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md }}>
+                {["A", "B", "C", "D", "F"].map(b => (
+                  <Pressable
+                    key={b}
+                    testID={`qr-block-${b}`}
+                    onPress={() => setQrBlock(b)}
+                    style={[styles.blockPill, qrBlock === b && styles.blockPillActive]}
+                  >
+                    <Text style={[styles.blockPillText, qrBlock === b && styles.blockPillTextActive]}>{b}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.formLabel}>Flat No</Text>
+              <TextInput testID="qr-flat-input" value={qrFlatNo} onChangeText={setQrFlatNo} style={styles.input} placeholder="e.g. 502" placeholderTextColor={COLORS.muted} />
+              <Text style={[styles.formLabel, { marginTop: SPACING.md }]}>Flat Type</Text>
+              <View style={{ flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md }}>
+                {(["2BHK", "3BHK"] as const).map(t => (
+                  <Pressable
+                    key={t}
+                    testID={`qr-bhk-${t}`}
+                    onPress={() => setQrBhk(t)}
+                    style={[styles.blockPill, { flex: 1 }, qrBhk === t && styles.blockPillActive]}
+                  >
+                    <Text style={[styles.blockPillText, qrBhk === t && styles.blockPillTextActive]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.formLabel}>Owner Name (optional)</Text>
+              <TextInput testID="qr-owner-input" value={qrOwnerName} onChangeText={setQrOwnerName} style={styles.input} placeholder="Leave blank if unknown" placeholderTextColor={COLORS.muted} />
+              <Text style={[styles.formLabel, { marginTop: SPACING.md }]}>Phone (optional)</Text>
+              <TextInput testID="qr-phone-input" value={qrPhone} onChangeText={setQrPhone} style={styles.input} placeholder="Leave blank if unknown" placeholderTextColor={COLORS.muted} keyboardType="phone-pad" maxLength={10} />
+              <Pressable testID="quick-register-btn" onPress={quickRegisterFlat} style={styles.primaryBtn} disabled={loading}>
+                {loading ? <ActivityIndicator color={COLORS.onBrand} /> : <Text style={styles.primaryBtnText}>Register Flat</Text>}
+              </Pressable>
+            </View>
+
+            <Text style={styles.sectionLabel}>SET OPENING / HISTORICAL DUE</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.formLabel}>Block</Text>
+              <View style={{ flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md }}>
+                {["A", "B", "C", "D", "F"].map(b => (
+                  <Pressable
+                    key={b}
+                    testID={`od-block-${b}`}
+                    onPress={() => setOdBlock(b)}
+                    style={[styles.blockPill, odBlock === b && styles.blockPillActive]}
+                  >
+                    <Text style={[styles.blockPillText, odBlock === b && styles.blockPillTextActive]}>{b}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.formLabel}>Flat No</Text>
+              <TextInput testID="od-flat-input" value={odFlatNo} onChangeText={setOdFlatNo} style={styles.input} placeholder="e.g. 101" placeholderTextColor={COLORS.muted} />
+              <Text style={[styles.formLabel, { marginTop: SPACING.md }]}>Opening Due Amount (₹)</Text>
+              <TextInput testID="od-amount-input" value={odAmount} onChangeText={setOdAmount} keyboardType="decimal-pad" style={styles.input} placeholder="e.g. 5000" placeholderTextColor={COLORS.muted} />
+              <Pressable testID="save-opening-due-btn" onPress={saveOpeningDue} style={styles.primaryBtn} disabled={loading}>
+                {loading ? <ActivityIndicator color={COLORS.onBrand} /> : <Text style={styles.primaryBtnText}>Save Opening Due</Text>}
+              </Pressable>
+              <Text style={styles.pinHint}>Set to ₹0 to clear a previously-entered opening due.</Text>
+            </View>
+
+            <Text style={styles.sectionLabel}>ALL REGISTERED FLATS ({flatsList.length})</Text>
+            {flatsList.length === 0 && <Text style={styles.emptyText}>No flats registered yet.</Text>}
+            {flatsList.map((f: any) => (
+              <View key={f.id} style={styles.flatRow} testID={`flat-row-${f.block}-${f.flat_no}`}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pTitle}>{f.block}-{f.flat_no} · {f.bhk_type}</Text>
+                  <Text style={styles.pSub} numberOfLines={1}>
+                    {f.owner_name || "No name"} · {f.phone || "No phone"}
+                    {f.opening_due > 0 ? ` · Opening due ₹${Number(f.opening_due).toLocaleString("en-IN")}` : ""}
+                    {f.corporate_covered ? ` · Corporate: ${f.corporate_payer_name}` : ""}
+                  </Text>
+                </View>
+                <Pressable
+                  testID={`delete-flat-${f.block}-${f.flat_no}`}
+                  onPress={() => deleteFlat(f.block, f.flat_no)}
+                  style={styles.deleteBtn}
+                >
+                  <Ionicons name="trash-outline" size={16} color={COLORS.error} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {tab === "gatepass" && (
+          <View testID="gatepass-panel">
+            <Text style={styles.sectionLabel}>GATE PASS REQUESTS ({gatePasses.length})</Text>
+            {gatePasses.length === 0 && <Text style={styles.emptyText}>No gate pass requests yet.</Text>}
+            {gatePasses.map((g: any) => (
+              <View key={g.id} style={styles.flatRow} testID={`gatepass-row-${g.block}-${g.flat_no}`}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <Text style={styles.pTitle}>{g.block}-{g.flat_no}</Text>
+                    <View style={[
+                      styles.statusChip,
+                      g.status === "approved" ? styles.statusOk : g.status === "rejected" ? { backgroundColor: COLORS.errorBg } : styles.statusWarn,
+                    ]}>
+                      <Text style={[
+                        styles.statusChipText,
+                        { color: g.status === "approved" ? COLORS.success : g.status === "rejected" ? COLORS.error : COLORS.warning },
+                      ]}>
+                        {g.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.pSub} numberOfLines={2}>
+                    {g.requested_by === "corporate" ? "Corporate request" : "Individual request"}
+                    {g.owner_name ? ` · ${g.owner_name}` : ""}
+                    {" · Conveyance receipt "}{g.conveyance_receipt_no}
+                    {g.pass_number ? ` · ${g.pass_number}` : ""}
+                  </Text>
+                </View>
+                {g.status === "pending" && (
+                  <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+                    <Pressable testID={`gatepass-approve-${g.id}`} onPress={() => approveGatePass(g.id)} style={styles.activateBtn}>
+                      <Text style={styles.activateBtnText}>Approve</Text>
+                    </Pressable>
+                    <Pressable testID={`gatepass-reject-${g.id}`} onPress={() => rejectGatePass(g.id)} style={styles.deleteBtn}>
+                      <Ionicons name="close" size={16} color={COLORS.error} />
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            ))}
+            <Text style={[styles.pinHint, { marginTop: SPACING.lg }]}>
+              After approving, remind the resident to show the approval screen to security. The next day, deactivate the flat from the Flats tab so a new occupant can register.
+            </Text>
+          </View>
         )}
       </KeyboardAwareScrollView>
     </View>
@@ -444,4 +860,10 @@ const styles = StyleSheet.create({
   statusChipText: { fontSize: 9, letterSpacing: 1, fontWeight: "700", fontFamily: FONTS.sans },
   verifyBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.brand },
   verifyBtnText: { color: COLORS.brand, fontSize: 10, fontWeight: "700", fontFamily: FONTS.sans, letterSpacing: 0.5 },
+  blockPill: { flex: 1, height: 40, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, justifyContent: "center", alignItems: "center" },
+  blockPillActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  blockPillText: { color: COLORS.onSurface, fontFamily: FONTS.serif, fontSize: 15 },
+  blockPillTextActive: { color: COLORS.onBrand, fontWeight: "700" },
+  flatRow: { flexDirection: "row", alignItems: "center", padding: SPACING.md, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, marginBottom: SPACING.sm, gap: SPACING.md },
+  deleteBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.errorBg, borderWidth: 1, borderColor: COLORS.error },
 });

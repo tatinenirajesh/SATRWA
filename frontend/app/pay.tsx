@@ -79,9 +79,13 @@ export default function Pay() {
 
   const confirmPayment = async () => {
     if (!session) return;
+    if (!refNo.trim()) {
+      Alert.alert("Reference Required", "Enter the UPI reference number or bank transaction number before saving the receipt.");
+      return;
+    }
     setProcessing(true); setStatus("processing");
     try {
-      let receipt;
+      let receipt: any;
       const commonBody = {
         block: session.block, flat_no: session.flat_no,
         upi_id: upiInfo?.vpa || "",
@@ -222,7 +226,7 @@ export default function Pay() {
               </Text>
             </View>
 
-            <Text style={styles.inputLabel}>UPI REFERENCE NUMBER (OPTIONAL)</Text>
+            <Text style={styles.inputLabel}>UPI REFERENCE NUMBER</Text>
             <TextInput
               testID="ref-no-input"
               value={refNo}
@@ -235,7 +239,7 @@ export default function Pay() {
               returnKeyType="done"
             />
             <Text style={styles.hint}>
-              You can leave blank if you don&apos;t have it. Committee will match with bank SMS.
+              Required for committee verification. Use the reference shown in your UPI app or bank SMS.
             </Text>
 
             <Pressable
@@ -258,8 +262,8 @@ export default function Pay() {
             <Pressable
               testID="i-have-paid-btn"
               onPress={confirmPayment}
-              disabled={processing || status === "done"}
-              style={[styles.payBtn, (processing || status === "done") && { opacity: 0.7 }]}
+              disabled={processing || status === "done" || !refNo.trim()}
+              style={[styles.payBtn, (processing || status === "done" || !refNo.trim()) && { opacity: 0.7 }]}
             >
               {status === "processing" ? (
                 <ActivityIndicator color={COLORS.onBrand} />

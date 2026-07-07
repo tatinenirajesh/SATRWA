@@ -171,22 +171,29 @@ export default function Maintenance() {
         )}
 
         <Text style={styles.sectionLabel}>ADD-ON</Text>
-        <View style={styles.conveyRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.conveyTitle}>Conveyance Charge</Text>
-            <Text style={styles.conveySub}>One-time charge on move-in / move-out</Text>
+        {!session.corporate_covered && (
+          <View style={styles.conveyRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.conveyTitle}>Conveyance Charge</Text>
+              <Text style={styles.conveySub}>One-time charge on move-in / move-out</Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.conveyAmt}>₹250</Text>
+              <Switch
+                testID="conveyance-switch"
+                value={includeConveyance}
+                onValueChange={setIncludeConveyance}
+                trackColor={{ false: COLORS.surfaceTertiary, true: COLORS.brand }}
+                thumbColor={includeConveyance ? COLORS.onBrand : "#666"}
+              />
+            </View>
           </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.conveyAmt}>₹250</Text>
-            <Switch
-              testID="conveyance-switch"
-              value={includeConveyance}
-              onValueChange={setIncludeConveyance}
-              trackColor={{ false: COLORS.surfaceTertiary, true: COLORS.brand }}
-              thumbColor={includeConveyance ? COLORS.onBrand : "#666"}
-            />
-          </View>
-        </View>
+        )}
+        {session.corporate_covered && (
+          <Text style={styles.hint}>
+            Conveyance for this flat is handled by {session.corporate_payer_name || "your organization"}, not paid here.
+          </Text>
+        )}
 
         {openingDueRemaining > 0 && (
           <View style={[styles.conveyRow, { marginTop: SPACING.md }]}>

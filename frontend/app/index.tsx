@@ -22,6 +22,7 @@ export default function Login() {
   const [bhk, setBhk] = useState<"2BHK" | "3BHK">("2BHK");
   const [ownerName, setOwnerName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [startMonth, setStartMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -51,7 +52,9 @@ export default function Login() {
         await saveSession({
           block: data.flat.block, flat_no: data.flat.flat_no,
           bhk_type: data.flat.bhk_type, owner_name: data.flat.owner_name,
-          phone: data.flat.phone, start_month: data.flat.start_month,
+          phone: data.flat.phone, email: data.flat.email, start_month: data.flat.start_month,
+          corporate_covered: !!data.flat.corporate_covered,
+          corporate_payer_name: data.flat.corporate_payer_name || null,
         });
         router.replace("/home");
       }
@@ -63,6 +66,7 @@ export default function Login() {
   const onRegister = async () => {
     if (!ownerName.trim()) return Alert.alert("Owner Name Required", "Please enter the owner's name.");
     if (!/^\d{10}$/.test(phone.trim())) return Alert.alert("Valid Phone Required", "Please enter a valid 10-digit mobile number.");
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return Alert.alert("Valid Email Required", "Please enter an email for account recovery.");
     setLoading(true);
     try {
       const res = await fetch(`${API}/auth/register`, {
@@ -70,7 +74,7 @@ export default function Login() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           block, flat_no: flatNo.trim(), bhk_type: bhk,
-          owner_name: ownerName.trim(), phone: phone.trim(), start_month: startMonth,
+          owner_name: ownerName.trim(), phone: phone.trim(), email: email.trim(), start_month: startMonth,
         }),
       });
       const data = await res.json();
@@ -78,7 +82,9 @@ export default function Login() {
       await saveSession({
         block: data.flat.block, flat_no: data.flat.flat_no,
         bhk_type: data.flat.bhk_type, owner_name: data.flat.owner_name,
-        phone: data.flat.phone, start_month: data.flat.start_month,
+        phone: data.flat.phone, email: data.flat.email, start_month: data.flat.start_month,
+        corporate_covered: !!data.flat.corporate_covered,
+        corporate_payer_name: data.flat.corporate_payer_name || null,
       });
       router.replace("/home");
     } catch (e: any) {
@@ -109,6 +115,25 @@ export default function Login() {
         >
           <View style={styles.crestWrap}>
             <BrandLogo size={210} />
+          </View>
+
+          <View style={styles.payerTypeRow}>
+            <Pressable
+              testID="payer-type-individual"
+              onPress={() => {}}
+              style={[styles.payerTypePill, styles.payerTypePillActive]}
+            >
+              <Ionicons name="home-outline" size={16} color={COLORS.onBrand} />
+              <Text style={[styles.payerTypeText, styles.payerTypeTextActive]}>Individual Resident</Text>
+            </Pressable>
+            <Pressable
+              testID="payer-type-corporate"
+              onPress={() => router.push("/corporate")}
+              style={styles.payerTypePill}
+            >
+              <Ionicons name="business-outline" size={16} color={COLORS.onSurfaceTertiary} />
+              <Text style={styles.payerTypeText}>Corporate Payer</Text>
+            </Pressable>
           </View>
 
           <Text style={styles.heading}>
@@ -194,6 +219,20 @@ export default function Login() {
                 returnKeyType="done"
                 maxLength={10}
               />
+
+              <Text style={styles.label}>Email for Recovery</Text>
+              <TextInput
+                testID="email-input"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="name@example.com"
+                placeholderTextColor={COLORS.muted}
+                style={styles.input}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+              <Text style={styles.hint}>Used only if you need committee help to recover access.</Text>
             </>
           )}
 
@@ -241,6 +280,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.surface },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xl },
   crestWrap: { alignItems: "center", marginTop: -SPACING.sm, marginBottom: 0 },
+  payerTypeRow: {
+    flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md,
+    paddingHorizontal: SPACING.md,
+  },
+  payerTypePill: {
+    flex: 1, height: 40, borderRadius: RADIUS.pill, flexDirection: "row",
+    alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceSecondary,
+  },
+  payerTypePillActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  payerTypeText: { color: COLORS.onSurfaceTertiary, fontSize: 12, fontFamily: FONTS.sans, fontWeight: "600" },
+  payerTypeTextActive: { color: COLORS.onBrand },
   heading: {
     fontFamily: FONTS.serif, color: COLORS.onSurface,
     fontSize: 24, marginTop: SPACING.sm, textAlign: "center",
