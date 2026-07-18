@@ -6,6 +6,9 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
+import {
+    pendingPayments,
+} from "@/src/services/api";
 
 export default function Admin() {
   const router = useRouter();
@@ -22,8 +25,33 @@ export default function Admin() {
   const [startNum, setStartNum] = useState("101");
   const [endNum, setEndNum] = useState("200");
 
-  const [tab, setTab] = useState<"today" | "all" | "series" | "settings" | "tools" | "flats" | "gatepass">("today");
+const [tab,setTab]=useState<
+"today"|
+"pending"|
+"all"|
+"series"|
+"settings"|
+"tools"|
+"flats"|
+"gatepass"|
+"manual"|
+"Reports"
+>("today");
   const [gatePasses, setGatePasses] = useState<any[]>([]);
+
+const [manualType,setManualType]=useState("maintenance");
+
+const [manualBlock,setManualBlock]=useState("A");
+
+const [manualFlat,setManualFlat]=useState("");
+
+const [manualAmount,setManualAmount]=useState("");
+
+const [manualMode,setManualMode]=useState("cash");
+
+const [manualRemarks,setManualRemarks]=useState("");
+
+const [pending,setPending]=useState<any[]>([]);
 
   // Tools tab state
   const [testBlock, setTestBlock] = useState("A");
@@ -44,44 +72,89 @@ export default function Admin() {
   const [qrOwnerName, setQrOwnerName] = useState("");
   const [qrPhone, setQrPhone] = useState("");
 
-  const verify = async () => {
-    if (!pin.trim()) return;
-    setLoading(true);
-    try {
-      const r = await fetch(`${API}/admin/verify`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pin.trim() }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error("Invalid PIN");
-      setAuthed(true);
-      loadAll();
-    } catch (e: any) {
-      Alert.alert("Access Denied", e.message || "Invalid PIN");
-    } finally { setLoading(false); }
-  };
+const verify = async () => {
 
-  const loadAll = async () => {
-    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
-      fetch(`${API}/admin/series`),
-      fetch(`${API}/admin/payments`),
-      fetch(`${API}/admin/payments/today`),
-      fetch(`${API}/admin/late-fee`),
-      fetch(`${API}/admin/flats`),
-      fetch(`${API}/admin/gatepasses`),
+  console.log("PIN ENTERED =", pin);
+
+  setLoading(true);
+
+  try {
+
+    console.log("API =", API);
+
+    const r = await fetch(`${API}/api/admin/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pin: pin.trim(),
+      }),
+    });
+
+    console.log("STATUS =", r.status);
+
+    const d = await r.json();
+
+    console.log("RESPONSE =", d);
+
+    if (!d.ok)
+      throw new Error("Invalid PIN");
+
+    setAuthed(true);
+
+    loadAll();
+
+  } catch (e:any) {
+
+    console.log("ERROR =", e);
+
+    Alert.alert(
+      "Access Denied",
+      e.message
+    );
+
+  } finally {
+
+    setLoading(false);
+
+  }
+
+};
+
+const loadAll = async () => {
+
+    const [r1,r2,r3,r4,r5,r6,r7] = await Promise.all([
+        fetch(`${API}/api/admin/series`),
+        fetch(`${API}/api/admin/payments`),
+        fetch(`${API}/api/admin/payments/today`),
+        fetch(`${API}/api/admin/late-fee`),
+        fetch(`${API}/api/admin/flats`),
+        fetch(`${API}/api/admin/gatepasses`),
+        fetch(`${API}/api/admin/pending-payments`)
     ]);
+
     setSeriesList((await r1.json()).series || []);
-    setAllPayments(await r2.json());
+    const all = await r2.json();
+
+setAllPayments({
+    maintenance: all.maintenance || [],
+    bookings: all.bookings || [],
+});
     setTodayPayments(await r3.json());
+
     const lf = await r4.json();
     setLateFee(String(lf.late_fee));
+
     setFlatsList((await r5.json()).flats || []);
     setGatePasses((await r6.json()).gate_passes || []);
-  };
+    setPending(await r7.json());
+
+};
 
   const approveGatePass = async (pass_id: string) => {
     try {
-      const r = await fetch(`${API}/admin/gatepass/approve`, {
+      const r = await fetch(`${API}/api/admin/gatepass/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pass_id, pin }),
       });
@@ -98,7 +171,7 @@ export default function Admin() {
       {
         text: "Reject", style: "destructive", onPress: async () => {
           try {
-            const r = await fetch(`${API}/admin/gatepass/reject`, {
+            const r = await fetch(`${API}/api/admin/gatepass/reject`, {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ pass_id, pin, reason: "Rejected by committee" }),
             });
@@ -118,7 +191,7 @@ export default function Admin() {
     }
     setLoading(true);
     try {
-      const r = await fetch(`${API}/admin/series`, {
+      const r = await fetch(`${API}/api/admin/series`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prefix: prefix.trim(), start: s, end: e, pin }),
       });
@@ -133,7 +206,7 @@ export default function Admin() {
 
   const activate = async (series_id: string) => {
     try {
-      const r = await fetch(`${API}/admin/series/activate`, {
+      const r = await fetch(`${API}/api/admin/series/activate`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ series_id, pin }),
       });
@@ -151,7 +224,7 @@ export default function Admin() {
     const v = parseInt(lateFee);
     if (isNaN(v) || v < 0) return Alert.alert("Invalid", "Enter a valid amount");
     try {
-      const r = await fetch(`${API}/admin/late-fee`, {
+      const r = await fetch(`${API}/api/admin/late-fee`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ late_fee: v, pin }),
       });
@@ -162,8 +235,8 @@ export default function Admin() {
     } catch (e: any) { Alert.alert("Error", e.message); }
   };
 
-  const exportAll = () => Linking.openURL(`${API}/admin/export?pin=${encodeURIComponent(pin)}`);
-  const exportToday = () => Linking.openURL(`${API}/admin/export/today?pin=${encodeURIComponent(pin)}`);
+  const exportAll = () => Linking.openURL(`${API}/api/admin/export?pin=${encodeURIComponent(pin)}`);
+  const exportToday = () => Linking.openURL(`${API}/api/admin/export/today?pin=${encodeURIComponent(pin)}`);
 
   const runTestPayment = async () => {
     const amt = parseFloat(testAmount);
@@ -172,7 +245,7 @@ export default function Admin() {
     }
     setLoading(true);
     try {
-      const r = await fetch(`${API}/admin/test-payment`, {
+      const r = await fetch(`${API}/api/admin/test-payment`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ block: testBlock, flat_no: testFlatNo.trim(), amount: amt, note: testNote, pin }),
       });
@@ -197,7 +270,7 @@ export default function Admin() {
           text: "Delete", style: "destructive", onPress: async () => {
             setLoading(true);
             try {
-              const r = await fetch(`${API}/admin/test-reset`, {
+              const r = await fetch(`${API}/api/admin/test-reset`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ pin, scope: "flat", block: resetBlock, flat_no: resetFlatNo.trim() }),
               });
@@ -225,7 +298,7 @@ export default function Admin() {
           text: "Delete All Test", style: "destructive", onPress: async () => {
             setLoading(true);
             try {
-              const r = await fetch(`${API}/admin/test-reset`, {
+              const r = await fetch(`${API}/api/admin/test-reset`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ pin, scope: "all_test" }),
               });
@@ -272,7 +345,7 @@ export default function Admin() {
     }
     setLoading(true);
     try {
-      const r = await fetch(`${API}/admin/opening-due`, {
+      const r = await fetch(`${API}/api/admin/opening-due`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ block: odBlock, flat_no: odFlatNo.trim(), amount: amt, pin }),
       });
@@ -296,7 +369,7 @@ export default function Admin() {
           text: "Delete Everything", style: "destructive", onPress: async () => {
             setLoading(true);
             try {
-              const r = await fetch(`${API}/admin/flat/delete`, {
+              const r = await fetch(`${API}/api/admin/flat/delete`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ block, flat_no, pin }),
               });
@@ -356,6 +429,128 @@ export default function Admin() {
     );
   }
 
+const saveManualPayment = async () => {
+  if (!manualFlat.trim()) {
+    return Alert.alert("Enter Flat Number");
+  }
+
+  const amount = parseFloat(manualAmount);
+
+  if (isNaN(amount) || amount <= 0) {
+    return Alert.alert("Enter valid amount");
+  }
+
+  setLoading(true);
+
+  try {
+    const r = await fetch(`${API}/api/admin/manual-payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pin,
+        payment_type: manualType,
+        payment_mode: manualMode,
+        block: manualBlock,
+        flat_no: manualFlat,
+        amount,
+        remarks: manualRemarks,
+      }),
+    });
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      throw new Error(d.detail || "Failed");
+    }
+
+    Alert.alert(
+      "Success",
+      `Receipt ${d.receipt_no} generated`
+    );
+
+    setManualFlat("");
+    setManualAmount("");
+    setManualRemarks("");
+
+    loadAll();
+
+  } catch (e: any) {
+
+    Alert.alert("Error", e.message);
+
+  } finally {
+
+    setLoading(false);
+
+  }
+  };
+
+const approvePayment = async (
+    id: string,
+    paymentType: string
+) => {
+
+  const r = await fetch(`${API}/api/admin/approve-payment`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id,
+      payment_type: paymentType,
+      pin,
+    }),
+  });
+
+  
+}
+
+const rejectPayment = async(
+id:string,
+paymentType:string
+)=>{
+
+  try {
+
+    const r = await fetch(`${API}/api/admin/reject-payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+
+    id,
+
+    payment_type: paymentType,
+
+    pin,
+
+    reason:"Rejected by Admin"
+
+}),
+    });
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      throw new Error(d.detail || "Failed");
+    }
+
+    Alert.alert(
+      "Rejected",
+      d.message
+    );
+
+    loadAll();
+
+  } catch (e: any) {
+
+    Alert.alert("Error", e.message);
+
+  }
+};
   const active = seriesList.find(s => s.active);
   const todaySummary = todayPayments.summary || {};
   const allSummary = allPayments.summary || {};
@@ -379,15 +574,44 @@ export default function Admin() {
       <View style={styles.tabsScroll}>
         <View style={styles.tabs}>
           <TabBtn label="Today" active={tab === "today"} onPress={() => setTab("today")} testID="today-tab" />
+          <TabBtn
+    label={`Pending (${pending.length})`}
+    active={tab==="pending"}
+    onPress={()=>setTab("pending")}
+/>
           <TabBtn label="All" active={tab === "all"} onPress={() => setTab("all")} testID="all-tab" />
           <TabBtn label="Series" active={tab === "series"} onPress={() => setTab("series")} testID="series-tab" />
           <TabBtn label="Settings" active={tab === "settings"} onPress={() => setTab("settings")} testID="settings-tab" />
         </View>
-        <View style={[styles.tabs, { marginTop: SPACING.sm }]}>
-          <TabBtn label="Tools" active={tab === "tools"} onPress={() => setTab("tools")} testID="tools-tab" />
-          <TabBtn label="Flats" active={tab === "flats"} onPress={() => setTab("flats")} testID="flats-tab" />
-          <TabBtn label="Gate Pass" active={tab === "gatepass"} onPress={() => setTab("gatepass")} testID="gatepass-tab" />
-        </View>
+        <View style={[styles.tabs,{marginTop:SPACING.sm}]}>
+    <TabBtn
+        label="Tools"
+        active={tab==="tools"}
+        onPress={()=>setTab("tools")}
+        testID="tools-tab"
+    />
+
+    <TabBtn
+        label="Flats"
+        active={tab==="flats"}
+        onPress={()=>setTab("flats")}
+        testID="flats-tab"
+    />
+
+    <TabBtn
+        label="Manual"
+        active={tab==="manual"}
+        onPress={()=>setTab("manual")}
+        testID="manual-tab"
+    />
+
+    <TabBtn
+        label="Gate Pass"
+        active={tab==="gatepass"}
+        onPress={()=>setTab("gatepass")}
+        testID="gatepass-tab"
+    />
+</View>
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: SPACING.xl, paddingBottom: 60 }} bottomOffset={40}>
@@ -433,6 +657,112 @@ export default function Admin() {
             ))}
           </View>
         )}
+
+        {tab==="pending" && (
+
+<View>
+
+<Text style={styles.sectionLabel}>
+Pending Payments
+</Text>
+
+{pending.length===0 && (
+
+<Text style={styles.emptyText}>
+No pending payments.
+</Text>
+
+)}
+
+{pending.map((p:any)=>(
+
+<View
+key={p.id}
+style={styles.paymentCard}
+>
+
+<Text>
+{p.payment_type?.toUpperCase()}
+</Text>
+
+<Text>
+
+{p.block}-{p.flat_no}
+
+</Text>
+
+<Text>
+
+₹{p.amount}
+
+</Text>
+
+<Text>
+
+{p.payment_mode}
+
+</Text>
+
+<Text>
+
+Txn:
+{p.transaction_ref}
+
+</Text>
+
+<Pressable
+
+style={styles.primaryBtn}
+
+onPress={() =>
+  approvePayment(
+    p.id,
+    p.payment_type
+  )
+}
+
+>
+
+<Text style={styles.primaryBtnText}>
+Approve
+</Text>
+
+</Pressable>
+
+<Pressable
+
+style={[
+styles.primaryBtn,
+{backgroundColor:"#b00020"}
+]}
+
+onPress={()=>
+
+rejectPayment(
+
+p.id,
+
+p.payment_type
+
+)
+
+}
+
+>
+
+<Text style={styles.primaryBtnText}>
+Reject
+</Text>
+
+</Pressable>
+
+</View>
+
+))}
+
+</View>
+
+)}
 
         {tab === "all" && (
           <View testID="all-panel">
@@ -698,6 +1028,193 @@ export default function Admin() {
             ))}
           </View>
         )}
+        
+        {tab==="manual" && (
+
+<View>
+
+<Text style={styles.sectionLabel}>
+MANUAL RECEIPT ENTRY
+</Text>
+
+<View style={styles.formCard}>
+
+<Text style={styles.formLabel}>
+Receipt Type
+</Text>
+
+<View style={{flexDirection:"row",gap:10}}>
+
+<Pressable
+style={[
+styles.blockPill,
+manualType=="maintenance" &&
+styles.blockPillActive
+]}
+onPress={()=>setManualType("maintenance")}
+>
+
+<Text
+style={[
+styles.blockPillText,
+manualType=="maintenance" &&
+styles.blockPillTextActive
+]}
+>
+
+Maintenance
+
+</Text>
+
+</Pressable>
+
+<Pressable
+style={[
+styles.blockPill,
+manualType=="clubhouse" &&
+styles.blockPillActive
+]}
+onPress={()=>setManualType("clubhouse")}
+>
+
+<Text
+style={[
+styles.blockPillText,
+manualType=="clubhouse" &&
+styles.blockPillTextActive
+]}
+>
+
+Clubhouse
+
+</Text>
+
+</Pressable>
+
+</View>
+
+
+<Text
+style={[
+styles.formLabel,
+{marginTop:20}
+]}
+>
+
+Payment Mode
+
+</Text>
+
+<View style={{flexDirection:"row",gap:10}}>
+
+<Pressable
+style={[
+styles.blockPill,
+manualMode=="cash" &&
+styles.blockPillActive
+]}
+onPress={()=>setManualMode("cash")}
+>
+
+<Text
+style={[
+styles.blockPillText,
+manualMode=="cash" &&
+styles.blockPillTextActive
+]}
+>
+
+Cash
+
+</Text>
+
+</Pressable>
+
+<Pressable
+style={[
+styles.blockPill,
+manualMode=="online" &&
+styles.blockPillActive
+]}
+onPress={()=>setManualMode("online")}
+>
+
+<Text
+style={[
+styles.blockPillText,
+manualMode=="online" &&
+styles.blockPillTextActive
+]}
+>
+
+Online
+
+</Text>
+
+</Pressable>
+
+</View>
+
+
+<Text style={[styles.formLabel,{marginTop:20}]}>
+Block
+</Text>
+
+<TextInput
+style={styles.input}
+value={manualBlock}
+onChangeText={setManualBlock}
+/>
+
+<Text style={[styles.formLabel,{marginTop:20}]}>
+Flat
+</Text>
+
+<TextInput
+style={styles.input}
+value={manualFlat}
+onChangeText={setManualFlat}
+/>
+
+<Text style={[styles.formLabel,{marginTop:20}]}>
+Amount
+</Text>
+
+<TextInput
+style={styles.input}
+value={manualAmount}
+keyboardType="numeric"
+onChangeText={setManualAmount}
+/>
+
+<Text style={[styles.formLabel,{marginTop:20}]}>
+Remarks
+</Text>
+
+<TextInput
+style={styles.input}
+value={manualRemarks}
+onChangeText={setManualRemarks}
+/>
+
+<Pressable
+style={styles.primaryBtn}
+onPress={saveManualPayment}
+>
+
+<Text style={styles.primaryBtnText}>
+
+Generate Receipt
+
+</Text>
+
+</Pressable>
+
+</View>
+
+</View>
+
+)}
 
         {tab === "gatepass" && (
           <View testID="gatepass-panel">
@@ -727,7 +1244,7 @@ export default function Admin() {
                     {g.pass_number ? ` · ${g.pass_number}` : ""}
                   </Text>
                 </View>
-                {g.status === "pending" && (
+                {g.status === "Pending ({pending.length})" && (
                   <View style={{ flexDirection: "row", gap: SPACING.sm }}>
                     <Pressable testID={`gatepass-approve-${g.id}`} onPress={() => approveGatePass(g.id)} style={styles.activateBtn}>
                       <Text style={styles.activateBtnText}>Approve</Text>
@@ -762,7 +1279,7 @@ function PaymentRow({ p, router, kind, pin, onChange }: { p: any; router: any; k
   const verify = async (e: any) => {
     e?.stopPropagation?.();
     try {
-      const r = await fetch(`${API}/admin/verify-payment`, {
+      const r = await fetch(`${API}/api/admin/verify-payment`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ receipt_no: p.receipt_no, pin, verified: !p.verified }),
       });
@@ -782,7 +1299,7 @@ function PaymentRow({ p, router, kind, pin, onChange }: { p: any; router: any; k
           <Text style={styles.pTitle}>{p.receipt_no} · {p.block}-{p.flat_no}</Text>
           <View style={[styles.statusChip, p.verified ? styles.statusOk : styles.statusWarn]}>
             <Text style={[styles.statusChipText, { color: p.verified ? COLORS.success : COLORS.warning }]}>
-              {p.verified ? "VERIFIED" : "PENDING"}
+              {p.verified ? "VERIFIED" : "Pending ({pending.length})"}
             </Text>
           </View>
         </View>

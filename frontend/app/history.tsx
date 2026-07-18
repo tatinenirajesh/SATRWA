@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
-import { getSession } from "@/src/session";
+import { getSession } from "@/src/services/session";
 
 export default function History() {
   const router = useRouter();

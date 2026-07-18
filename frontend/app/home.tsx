@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
-import { getSession, saveSession, clearSession, Session } from "@/src/session";
+import { getSession, saveSession, clearSession, Session } from "@/src/services/session";
 import { BrandLogo } from "@/src/components/BrandLogo";
 
 export default function Home() {
@@ -207,6 +207,117 @@ export default function Home() {
           <Text style={styles.secondaryText}>Payment History</Text>
           <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
         </Pressable>
+        
+        <Pressable
+    testID="profile-link"
+    onPress={() => router.push("/profile")}
+    style={styles.secondaryRow}
+>
+    <Ionicons
+        name="person-outline"
+        size={18}
+        color={COLORS.brand}
+    />
+
+    <Text style={styles.secondaryText}>
+        My Profile
+    </Text>
+
+    <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={COLORS.muted}
+    />
+</Pressable>
+
+        <Pressable
+    testID="notice-link"
+    onPress={() => router.push("/notices")}
+    style={styles.secondaryRow}
+>
+    <Ionicons
+        name="notifications-outline"
+        size={18}
+        color={COLORS.brand}
+    />
+
+    <Text style={styles.secondaryText}>
+        Notices & Circulars
+    </Text>
+
+    <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={COLORS.muted}
+    />
+</Pressable>
+
+        <Pressable
+    testID="guest-room-link"
+    onPress={() => router.push("/guest-room")}
+    style={styles.secondaryRow}
+>
+    <Ionicons
+        name="bed-outline"
+        size={18}
+        color={COLORS.brand}
+    />
+
+    <Text style={styles.secondaryText}>
+        Guest Room Booking
+    </Text>
+
+    <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={COLORS.muted}
+    />
+</Pressable>
+
+        <Pressable
+    testID="hall-link"
+    onPress={() => router.push("/community-hall")}
+    style={styles.secondaryRow}
+>
+    <Ionicons
+        name="business-outline"
+        size={18}
+        color={COLORS.brand}
+    />
+
+    <Text style={styles.secondaryText}>
+        Community Hall Booking
+    </Text>
+
+    <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={COLORS.muted}
+    />
+</Pressable>
+
+        
+        <Pressable
+  testID="admin-link"
+  onPress={() => router.push("/admin")}
+  style={styles.secondaryRow}
+>
+  <Ionicons
+    name="shield-checkmark-outline"
+    size={18}
+    color={COLORS.brand}
+  />
+
+  <Text style={styles.secondaryText}>
+    Admin Panel
+  </Text>
+
+  <Ionicons
+    name="chevron-forward"
+    size={18}
+    color={COLORS.muted}
+  />
+</Pressable>
       </ScrollView>
     </View>
   );

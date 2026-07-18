@@ -33,4 +33,4 @@ export const FONTS = {
 
 export const BLOCKS = ["A", "B", "C", "D", "F"];
 
-export const API = process.env.EXPO_PUBLIC_BACKEND_URL + "/api";
+export const API = process.env.EXPO_PUBLIC_BACKEND_URL!;

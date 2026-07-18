@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
-import { getSession, Session } from "@/src/session";
+import { getSession, Session } from "@/src/services/session";
 
 export default function GatePass() {
   const router = useRouter();

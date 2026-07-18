@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
-import { getSession, Session } from "@/src/session";
+import { getSession, Session } from "@/src/services/session";
 
 type Tab = "gym" | "pool";
 const POOL: Record<number, number> = { 1: 700, 2: 1000, 3: 1500, 4: 2000 };

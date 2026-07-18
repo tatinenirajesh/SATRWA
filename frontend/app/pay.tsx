@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
-import { getSession } from "@/src/session";
+import { getSession } from "@/src/services/session";
 
 type Step = "pay" | "confirm";
 
