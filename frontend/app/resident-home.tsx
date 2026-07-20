@@ -111,6 +111,12 @@ export default function ResidentHome() {
 
           <View style={styles.gridContainer}>
 
+              <Grid
+              icon="wallet-outline"
+              title="My Dues"
+              route="/my-dues"
+            />
+
             <Grid
               icon="card-outline"
               title="Maintenance"
@@ -118,32 +124,51 @@ export default function ResidentHome() {
             />
 
             <Grid
+              icon="cash-outline"
+              title="Pay Now"
+              route="/pay"
+            />
+
+            <Grid
+              icon="time-outline"
+              title="Payment History"
+              route="/payment-history"
+            />
+
+            <Grid
               icon="receipt-outline"
               title="Receipts"
-              route="/receipts"
+              route="/history"
             />
 
             <Grid
-  	    icon="megaphone-outline"
-            title="Notices"
-            route="/notices"
+              icon="megaphone-outline"
+              title="Notices"
+              route="/notices"
             />
 
             <Grid
-            icon="warning-outline"
-            title="Complaints"
-            route="/complaints"
+              icon="warning-outline"
+              title="Complaints"
+              route="/complaints"
             />
 
             <Grid
-            icon="people-outline"
-            title="Visitors"
-            route="/visitors"
+              icon="people-outline"
+              title="Visitors"
+              route="/visitors"
             />
 
             <Grid
               icon="barbell-outline"
               title="Amenities"
+              route="/amenity"
+            />
+
+            <Grid
+              icon="shield-checkmark-outline"
+              title="Gate Pass"
+              route="/gatepass"
             />
 
           </View>
