@@ -22,7 +22,7 @@ export default function ForgotPin(){
     async function sendOTP(){
 
         const r=await fetch(
-            `${API}/auth/request-pin-reset`,
+            `${API}/api/auth/request-pin-reset`,
             {
                 method:"POST",
                 headers:{
@@ -52,7 +52,7 @@ export default function ForgotPin(){
     async function resetPin(){
 
         const r=await fetch(
-            `${API}/auth/reset-pin`,
+            `${API}/api/auth/reset-pin`,
             {
                 method:"POST",
                 headers:{
