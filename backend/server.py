@@ -20,10 +20,15 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 import qrcode
 from urllib.parse import quote
-from payment_engine import create_payment
 from receipt_engine import next_receipt
 from admin_payment_engine import verify_payment
-from payment_engine import submit_payment
+from payment_engine import (
+    create_payment,
+    submit_payment,
+    create_gateway_order,
+    payment_success,
+    payment_failed,
+)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
@@ -161,6 +166,17 @@ MORNING = "MORNING"
 EVENING = "EVENING"
 
 # ---------------- MODELS ----------------
+class GatewayWebhook(BaseModel):
+
+    payment_id: str
+
+    transaction_id: str
+
+    status: str
+
+class CreateGatewayOrder(BaseModel):
+
+    payment_id: str
 
 class SystemSettingsUpdate(BaseModel):
 
@@ -1201,99 +1217,306 @@ async def get_dues(block: str, flat_no: str):
 
 @api_router.post("/maintenance/pay")
 async def pay_maintenance(body: PayMaintenance):
-    require_txn_ref(body.upi_ref_no)
+
     flat = await get_flat(body.block, body.flat_no)
+
     if not flat:
         raise HTTPException(404, "Flat not registered")
+
     dues = await compute_dues(flat)
+
     pending = dues["pending_months"]
+
     opening_due_remaining = dues["opening_due_remaining"]
-    if not pending and not body.include_conveyance and not (body.include_opening_due and opening_due_remaining > 0):
-        raise HTTPException(400, "No dues to pay.")
+
+    if (
+        not pending
+        and not body.include_conveyance
+        and not (
+            body.include_opening_due
+            and opening_due_remaining > 0
+        )
+    ):
+        raise HTTPException(
+            400,
+            "No dues to pay."
+        )
 
     if body.mode == "full":
+
         months_to_pay = pending
-    else:  # current_month
+
+    else:
+
         now_ym = current_ym()
+
         if now_ym not in pending:
-            raise HTTPException(400, "Current month is already paid or not yet billed.")
+
+            raise HTTPException(
+                400,
+                "Current month is already paid."
+            )
+
         months_to_pay = [now_ym]
 
     late_fee_pm = dues["late_fee_per_month"]
-    late_months_paid = [m for m in months_to_pay if m in dues["late_months"]]
+
+    late_months_paid = [
+
+        m
+
+        for m in months_to_pay
+
+        if m in dues["late_months"]
+
+    ]
+
     late_fee_amount = len(late_months_paid) * late_fee_pm
 
     rate = dues["rate"]
-    maint_amount = len(months_to_pay) * rate
-    conveyance = CONVEYANCE if body.include_conveyance else 0
-    # Opening due can only be cleared alongside a "full" payment (must clear everything together)
-    opening_due_amount = opening_due_remaining if (body.include_opening_due and body.mode == "full") else 0
-    total = maint_amount + conveyance + late_fee_amount + opening_due_amount
 
-    receipt_no = None
-    now_iso = datetime.now(timezone.utc).isoformat()
-    doc = {
-        "id": str(uuid.uuid4()),
-        "receipt_no": None,
-        "type": "maintenance",
-        "block": flat["block"],
-        "flat_no": flat["flat_no"],
-        "owner_name": flat.get("owner_name", ""),
-        "phone": flat.get("phone", ""),
-        "bhk_type": flat["bhk_type"],
-        "mode": body.mode,
-        "months_covered": months_to_pay,
-        "months_count": len(months_to_pay),
-        "rate": rate,
-        "maintenance_amount": maint_amount,
-        "conveyance_amount": conveyance,
-        "late_fee_amount": late_fee_amount,
-        "late_months_paid": late_months_paid,
-        "opening_due_amount": opening_due_amount,
-        "total_amount": total,
-        "upi_id": body.upi_id or "",
-        "upi_ref_no": (body.upi_ref_no or "").strip(),
-        "verified": False,
-        "status": "PENDING_VERIFICATION",
-        "paid_at": now_iso,
-        "timeline": [
-    {
-        "status": "SUBMITTED",
-        "at": now_iso,
-        "by": "RESIDENT"
-    }
-],
-        "paid_date": today_str(),
-    }
+    maint_amount = len(months_to_pay) * rate
+
+    conveyance = (
+        CONVEYANCE
+        if body.include_conveyance
+        else 0
+    )
+
+    opening_due_amount = (
+
+        opening_due_remaining
+
+        if (
+            body.include_opening_due
+            and body.mode == "full"
+        )
+
+        else 0
+
+    )
+
+    total = (
+
+        maint_amount
+        + conveyance
+        + late_fee_amount
+        + opening_due_amount
+
+    )
+
     payment = await create_payment(
 
-    db,
+        db,
 
-    module="MAINTENANCE",
+        module="MAINTENANCE",
 
-    entity_type="RESIDENT",
+        entity_type="RESIDENT",
 
-    entity_id=f"{flat['block']}-{flat['flat_no']}",
+        entity_id=f"{flat['block']}-{flat['flat_no']}",
 
-    payer_name=flat.get("owner_name",""),
+        payer_name=flat.get(
+            "owner_name",
+            "",
+        ),
 
-    block=flat["block"],
+        block=flat["block"],
 
-    flat_no=flat["flat_no"],
+        flat_no=flat["flat_no"],
 
-    amount=total,
+        amount=total,
 
-    payment_mode="ONLINE",
+        payment_mode="ICICI",
 
-    receipt_book="MAINTENANCE_ONLINE",
+        receipt_book="MAINTENANCE",
 
-    reference_id=receipt_no,
+    )
 
-)
-    await db.maintenance_payments.insert_one(doc.copy())
-    doc.pop("_id", None)
+    now_iso = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    doc = {
+
+        "id": str(uuid.uuid4()),
+
+        "payment_id": payment["payment_id"],
+
+        "receipt_no": None,
+
+        "type": "maintenance",
+
+        "block": flat["block"],
+
+        "flat_no": flat["flat_no"],
+
+        "owner_name": flat.get(
+            "owner_name",
+            "",
+        ),
+
+        "phone": flat.get(
+            "phone",
+            "",
+        ),
+
+        "bhk_type": flat["bhk_type"],
+
+        "mode": body.mode,
+
+        "months_covered": months_to_pay,
+
+        "months_count": len(
+            months_to_pay
+        ),
+
+        "rate": rate,
+
+        "maintenance_amount": maint_amount,
+
+        "conveyance_amount": conveyance,
+
+        "late_fee_amount": late_fee_amount,
+
+        "late_months_paid": late_months_paid,
+
+        "opening_due_amount": opening_due_amount,
+
+        "total_amount": total,
+
+        "gateway": "ICICI",
+
+        "gateway_status": "NOT_STARTED",
+
+        "upi_id": body.upi_id or "",
+
+        "upi_ref_no": (
+            body.upi_ref_no or ""
+        ).strip(),
+
+        "verified": False,
+
+        "status": "PENDING_VERIFICATION",
+
+        "paid_at": now_iso,
+
+        "timeline": [
+
+            {
+
+                "status": "PAYMENT_CREATED",
+
+                "at": now_iso,
+
+                "by": "SYSTEM",
+
+            }
+
+        ],
+
+        "paid_date": today_str(),
+
+    }
+
+    await db.maintenance_payments.insert_one(doc)
+
     fresh_dues = await compute_dues(flat)
-    return {"receipt": doc, "dues": fresh_dues}
+
+    return {
+
+        "success": True,
+
+        "gateway": "ICICI",
+
+        "payment": payment,
+
+        "receipt": doc,
+
+        "dues": fresh_dues,
+
+    }
+
+@api_router.post("/payment/create-order")
+async def create_gateway_order_api(
+    body: CreateGatewayOrder,
+):
+
+    payment = await db.payments.find_one(
+        {
+            "payment_id": body.payment_id,
+        },
+        {
+            "_id": 0,
+        },
+    )
+
+    if not payment:
+
+        raise HTTPException(
+            404,
+            "Payment not found.",
+        )
+
+    order_id = str(uuid.uuid4())
+
+    payment_url = ""
+
+    await create_gateway_order(
+
+        db,
+
+        payment["payment_id"],
+
+        order_id,
+
+        payment_url,
+
+    )
+
+    return {
+
+        "success": True,
+
+        "gateway": "ICICI",
+
+        "order_id": order_id,
+
+        "payment_url": payment_url,
+
+    }
+
+@api_router.post("/payment/webhook")
+async def payment_webhook(
+    body: GatewayWebhook,
+):
+
+    if body.status == "SUCCESS":
+
+        await payment_success(
+
+            db,
+
+            body.payment_id,
+
+            body.transaction_id,
+
+        )
+
+    else:
+
+        await payment_failed(
+
+            db,
+
+            body.payment_id,
+
+        )
+
+    return {
+
+        "success": True,
+
+    }
 
 @api_router.post("/amenity/gym")
 async def book_gym(body: BookGym):

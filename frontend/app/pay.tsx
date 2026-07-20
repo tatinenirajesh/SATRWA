@@ -131,11 +131,30 @@ export default function Pay() {
       }
       setStatus("done");
       setTimeout(() => {
-        router.replace({ pathname: "/receipt", params: { no: receipt.receipt_no } });
+        if (receipt?.receipt_no) {
+
+    router.replace({
+        pathname:"/receipt",
+        params:{no:receipt.receipt_no}
+    });
+
+} else {
+
+    Alert.alert(
+        "Payment Successful",
+        "Payment recorded successfully."
+    );
+
+    router.replace("/resident-home");
+
+}
       }, 500);
     } catch (e: any) {
       setStatus("idle");
-      Alert.alert("Failed", e.message || "Try again");
+      Alert.alert(
+    "Payment Failed",
+    e.message || "Please try again."
+);
     } finally { setProcessing(false); }
   };
 
@@ -151,7 +170,7 @@ export default function Pay() {
             <Pressable testID="back-btn" onPress={() => router.back()} style={styles.iconBtn}>
               <Ionicons name="chevron-back" size={22} color={COLORS.brand} />
             </Pressable>
-            <Text style={styles.headerTitle}>UPI Payment</Text>
+            <Text style={styles.headerTitle}>Secure Payment</Text>
             <View style={{ width: 40 }} />
           </View>
         </SafeAreaView>
@@ -189,7 +208,7 @@ export default function Pay() {
             <Text style={styles.orText}>— OR SCAN THE QR —</Text>
 
             <View style={styles.qrCard}>
-              <Text style={styles.qrLabel}>SCAN & PAY</Text>
+              <Text style={styles.qrLabel}>SCAN TO PAY</Text>
               <View style={styles.qrBox}>
                 <Image
                   source={{ uri: qrUrl }}
@@ -219,10 +238,10 @@ export default function Pay() {
               <View style={styles.checkCircle}>
                 <Ionicons name="checkmark" size={32} color={COLORS.onBrand} />
               </View>
-              <Text style={styles.confirmTitle}>Did the payment succeed?</Text>
+              <Text style={styles.confirmTitle}>Confirm Payment</Text>
               <Text style={styles.confirmSub}>
                 Enter the 12-digit UPI reference number from your bank SMS or UPI app.
-                Committee will verify and issue final receipt.
+                Your payment will be verified automatically once ICICI Payment Gateway is integrated.
               </Text>
             </View>
 
@@ -239,7 +258,7 @@ export default function Pay() {
               returnKeyType="done"
             />
             <Text style={styles.hint}>
-              Required for committee verification. Use the reference shown in your UPI app or bank SMS.
+              This screen is temporary. Once ICICI Gateway is enabled, the transaction will be verified automatically.
             </Text>
 
             <Pressable
@@ -275,7 +294,7 @@ export default function Pay() {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={18} color={COLORS.onBrand} />
-                  <Text style={styles.payBtnText}>I have paid — Save Receipt</Text>
+                  <Text style={styles.payBtnText}>Confirm Payment</Text>
                 </>
               )}
             </Pressable>

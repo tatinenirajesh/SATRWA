@@ -17,7 +17,7 @@ async def create_payment(
     block,
     flat_no,
     amount,
-    payment_mode,
+    payment_mode="ICICI",
     receipt_book,
     remarks="",
     reference_id=None,
@@ -26,6 +26,16 @@ async def create_payment(
     payment = {
 
         "payment_id": str(uuid.uuid4()),
+
+        "gateway_order_id": None,
+
+        "gateway_transaction_id": None,
+
+        "gateway_name": "ICICI",
+
+        "gateway_status": "NOT_STARTED",
+
+        "payment_url": None,
 
         "reference_id": reference_id,
 
@@ -71,16 +81,12 @@ async def create_payment(
 
     return payment
 
+
 async def submit_payment(
-
     db,
-
     payment_id,
-
-    upi_id,
-
-    upi_ref_no,
-
+    upi_id="",
+    upi_ref_no="",
 ):
 
     await db.payments.update_one(
@@ -93,16 +99,111 @@ async def submit_payment(
 
         {
 
-            "$set":{
+            "$set": {
 
-                "status":"PAYMENT_PENDING_VERIFICATION",
+                "status": PAYMENT_PENDING,
 
-                "upi_id":upi_id,
+                "upi_id": upi_id,
 
-                "upi_ref_no":upi_ref_no,
+                "upi_ref_no": upi_ref_no,
 
             }
 
-        }
+        },
+
+    )
+
+
+async def create_gateway_order(
+    db,
+    payment_id,
+    order_id,
+    payment_url,
+):
+
+    await db.payments.update_one(
+
+        {
+
+            "payment_id": payment_id,
+
+        },
+
+        {
+
+            "$set": {
+
+                "gateway_order_id": order_id,
+
+                "payment_url": payment_url,
+
+                "gateway_status": "ORDER_CREATED",
+
+            }
+
+        },
+
+    )
+
+
+async def payment_success(
+    db,
+    payment_id,
+    gateway_transaction_id,
+):
+
+    await db.payments.update_one(
+
+        {
+
+            "payment_id": payment_id,
+
+        },
+
+        {
+
+            "$set": {
+
+                "gateway_transaction_id": gateway_transaction_id,
+
+                "gateway_status": "SUCCESS",
+
+                "status": PAYMENT_VERIFIED,
+
+                "verified_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+
+            }
+
+        },
+
+    )
+
+
+async def payment_failed(
+    db,
+    payment_id,
+):
+
+    await db.payments.update_one(
+
+        {
+
+            "payment_id": payment_id,
+
+        },
+
+        {
+
+            "$set": {
+
+                "gateway_status": "FAILED",
+
+                "status": PAYMENT_REJECTED,
+
+            }
+
+        },
 
     )

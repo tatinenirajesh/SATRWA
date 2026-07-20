@@ -12,6 +12,8 @@ import { router } from "expo-router";
 
 import { API, COLORS } from "@/src/theme";
 
+import { getSession } from "@/src/services/session";
+
 export default function PayMaintenance() {
 
   const [dues, setDues] = useState<any>();
@@ -26,33 +28,45 @@ export default function PayMaintenance() {
 
   }, []);
 
-  async function load() {
+async function load() {
 
-    const block = "A";
+  const session = await getSession();
 
-    const flat = "101";
-
-    const r = await fetch(
-      `${API}/api/resident/my-dues?block=${block}&flat_no=${flat}`
-    );
-
-    setDues(await r.json());
-
+  if (!session) {
+    Alert.alert("Session Expired", "Please login again.");
+    router.replace("/");
+    return;
   }
 
-  async function submit() {
+  const r = await fetch(
+    `${API}/api/resident/my-dues?block=${session.block}&flat_no=${session.flat_no}`
+  );
 
-    const body = {
+  setDues(await r.json());
 
-      block: "A",
+}
 
-      flat_no: "101",
+async function submit() {
 
-      upi_id: upiId,
+  const session = await getSession();
 
-      upi_ref_no: upiRef,
+  if (!session) {
+    Alert.alert("Session Expired", "Please login again.");
+    router.replace("/");
+    return;
+  }
 
-    };
+  const body = {
+
+    block: session.block,
+
+    flat_no: session.flat_no,
+
+    upi_id: upiId,
+
+    upi_ref_no: upiRef,
+
+  };
 
     const r = await fetch(
 

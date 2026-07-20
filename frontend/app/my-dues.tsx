@@ -8,6 +8,8 @@ Pressable
 
 import {API,COLORS} from "@/src/theme";
 
+import { getSession } from "@/src/services/session";
+
 export default function MyDues(){
 
 const [dues,setDues]=useState<any>();
@@ -20,8 +22,16 @@ load();
 
 async function load(){
 
-const block="A";
-const flat="101";
+const session = await getSession();
+
+if (!session) {
+  Alert.alert("Session Expired", "Please login again.");
+  router.replace("/");
+  return;
+}
+
+const block = session.block;
+const flat_no = session.flat_no;
 
 const r=await fetch(
 

@@ -143,7 +143,7 @@ async function onRegister() {
 
   Alert.alert(
     "Success",
-    "Your registration has been submitted for committee approval.",
+    "Your registration is Successful. Welcome to SAT",
     [
       {
         text: "OK",

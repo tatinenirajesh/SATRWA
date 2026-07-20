@@ -8,38 +8,43 @@ import {
 } from "react-native";
 import { API, COLORS } from "@/src/theme";
 
+import { getSession } from "@/src/services/session";
+
 export default function PaymentHistory() {
 
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<any[]>([]);
 
-  async function load() {
+async function load() {
 
-    try {
+  try {
 
-      // TODO:
-      // Later replace these with logged-in resident details
+    const session = await getSession();
 
-      const block = "A";
-      const flat_no = "101";
+    if (!session) {
 
-      const res = await fetch(
-        `${API}/api/resident/payment-history?block=${block}&flat_no=${flat_no}`
-      );
-
-      const data = await res.json();
-
-      setPayments(data);
-
-    } catch (e) {
-
-      console.log(e);
+      setLoading(false);
+      return;
 
     }
 
-    setLoading(false);
+    const res = await fetch(
+      `${API}/api/resident/payment-history?block=${session.block}&flat_no=${session.flat_no}`
+    );
+
+    const data = await res.json();
+
+    setPayments(data);
+
+  } catch (e) {
+
+    console.log(e);
 
   }
+
+  setLoading(false);
+
+}
 
   useEffect(() => {
 
@@ -74,7 +79,22 @@ export default function PaymentHistory() {
 
           <Text>
             Receipt :
-            {p.receipt_no || "Pending"}
+            {p.receipt_no || "--"}
+          </Text>
+
+          <Text>
+            Payment Mode :
+            {p.payment_mode || "--"}
+          </Text>
+
+          <Text>
+            UPI Ref :
+            {p.upi_ref_no || "--"}
+          </Text>
+
+          <Text>
+            Verified By :
+            {p.verified_by || "--"}
           </Text>
 
           <Text>
