@@ -1081,6 +1081,82 @@ async def auth_verify_otp(req: VerifyOTP):
         "verified": True
     }
 
+@app.post("/auth/request-pin-reset")
+async def request_pin_reset(req: RequestPinReset):
+
+    email = normalize_email(req.email)
+
+    account = await accounts.find_one(
+        {"email": email},
+        {"_id": 0},
+    )
+
+    if not account:
+        raise HTTPException(
+            404,
+            "Account not found."
+        )
+
+    otp = generate_otp()
+
+    save_otp(email, otp)
+
+    send_otp(email, otp)
+
+    return {
+        "success": True,
+        "message": "OTP sent successfully."
+    }
+
+@app.post("/auth/reset-pin")
+async def reset_pin(req: ResetPin):
+
+    email = normalize_email(req.email)
+
+    if req.new_pin != req.confirm_pin:
+        raise HTTPException(
+            400,
+            "PINs do not match."
+        )
+
+    if len(req.new_pin) != 4 or not req.new_pin.isdigit():
+        raise HTTPException(
+            400,
+            "PIN must be exactly 4 digits."
+        )
+
+    if not verify_otp(email, req.otp):
+        raise HTTPException(
+            400,
+            "Invalid or expired OTP."
+        )
+
+    account = await accounts.find_one(
+        {"email": email}
+    )
+
+    if not account:
+        raise HTTPException(
+            404,
+            "Account not found."
+        )
+
+    await accounts.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "pin_hash": hash_pin(req.new_pin),
+                "failed_attempts": 0,
+                "locked_until": None,
+            }
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "PIN reset successfully."
+    }
+
 @app.get("/admin/pending-registrations")
 async def pending_registrations():
 

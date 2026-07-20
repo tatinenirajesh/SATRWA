@@ -142,7 +142,7 @@ export default function OwnerLogin() {
             <BrandLogo size={70}/>
 
             <Text style={styles.title}>
-              Owner Login Test
+              Owner Login
             </Text>
 
             <Text style={styles.subtitle}>
