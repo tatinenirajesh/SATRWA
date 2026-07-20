@@ -3,52 +3,38 @@
     "name": "SATRWA",
     "slug": "satrwa",
     "version": "1.0.0",
-
     "orientation": "portrait",
-
     "icon": "./assets/images/icon.png",
-
     "scheme": "satrwa",
-
     "userInterfaceStyle": "automatic",
-
     "newArchEnabled": true,
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.satrwa.app"
     },
-
     "android": {
       "package": "com.satrwa.app",
-
       "versionCode": 1,
-
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-
       "permissions": [
         "INTERNET",
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "POST_NOTIFICATIONS"
       ],
-
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize"
     },
-
     "web": {
       "bundler": "metro",
       "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
-
       [
         "expo-splash-screen",
         {
@@ -59,9 +45,14 @@
         }
       ]
     ],
-
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a20cf254-91b5-455b-b2d9-b573259c20ad"
+      }
     }
   }
 }

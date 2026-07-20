@@ -30,7 +30,7 @@ export default function PendingScreen() {
         </View>
 
         <Text style={styles.title}>
-          Registration Submitted
+          Registration Successful
         </Text>
 
         <Text style={styles.subtitle}>
@@ -42,7 +42,7 @@ export default function PendingScreen() {
         <View style={styles.card}>
 
           <Text style={styles.cardTitle}>
-            Current Status
+            Account Status
           </Text>
 
           <View style={styles.statusRow}>
@@ -54,22 +54,13 @@ export default function PendingScreen() {
             />
 
             <Text style={styles.status}>
-              Pending Committee Approval
+              Active
             </Text>
 
           </View>
 
           <Text style={styles.info}>
-            Your registration request has been
-            submitted successfully.
-            {"\n\n"}
-            The Association Committee will verify
-            your details before activating your
-            account.
-            {"\n\n"}
-            Once approved, you will receive an
-            email confirmation and can log in
-            using your Email and PIN.
+            Your account has been created successfully. You can now login using your registered email and PIN.
           </Text>
 
         </View>
@@ -82,7 +73,7 @@ export default function PendingScreen() {
       >
 
         <Text style={styles.buttonText}>
-          Back to Home
+          Go to Login
         </Text>
 
       </Pressable>

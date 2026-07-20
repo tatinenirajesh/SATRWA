@@ -659,10 +659,7 @@ async def get_account(email: str):
 
 
 async def pending_registration(email: str):
-    return await registration_requests.find_one(
-        {"email": normalize_email(email)},
-        {"_id": 0},
-    )
+    return None
 
 async def compute_dues(flat: dict) -> dict:
 
@@ -1061,100 +1058,6 @@ async def pending_registrations():
 
     return rows
 
-@api_router.post("/admin/approve-registration")
-async def approve_registration(body: ApproveRegistration):
-
-    req = await registration_requests.find_one(
-        {"id": body.registration_id},
-        {"_id": 0},
-    )
-
-    if not req:
-        raise HTTPException(404, "Registration not found.")
-
-    existing = await accounts.find_one(
-        {"email": req["email"]},
-        {"_id": 0},
-    )
-
-    if existing:
-        raise HTTPException(400, "Account already exists.")
-
-    account = {
-        "id": str(uuid.uuid4()),
-        "role": req["role"],
-        "block": req["block"],
-        "flat_no": req["flat_no"],
-        "owner_name": req["owner_name"],
-        "phone": req["phone"],
-        "email": req["email"],
-        "pin_hash": req["pin_hash"],
-        "failed_attempts": 0,
-        "locked_until": None,
-        "approved": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    await accounts.insert_one(account)
-
-    existing_flat = await get_flat(
-        req["block"],
-        req["flat_no"],
-    )
-
-    if existing_flat:
-
-        if existing_flat.get("auto_created", False):
-
-            await db.flats.update_one(
-                {
-                    "block": req["block"],
-                    "flat_no": req["flat_no"],
-                },
-                {
-                    "$set": {
-                        "owner_name": req["owner_name"],
-                        "phone": req["phone"],
-                        "email": req["email"],
-                        "auto_created": False,
-                    }
-                },
-            )
-
-    else:
-
-        flat = {
-            "id": str(uuid.uuid4()),
-            "block": req["block"],
-            "flat_no": req["flat_no"],
-            "bhk_type": req["bhk_type"],
-            "owner_name": req["owner_name"],
-            "phone": req["phone"],
-            "email": req["email"],
-            "start_month": datetime.now().strftime("%Y-%m"),
-            "corporate_covered": False,
-            "corporate_payer_id": None,
-            "corporate_payer_name": None,
-            "auto_created": False,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-        await db.flats.insert_one(flat)
-
-    await registration_requests.update_one(
-        {"id": body.registration_id},
-        {
-            "$set": {
-                "status": "APPROVED",
-                "approved": True,
-                "approved_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
-    )
-
-    return {
-        "success": True
-    }
 
 @api_router.post("/admin/reject-registration")
 async def reject_registration(body: RejectRegistration):
@@ -1197,29 +1100,20 @@ async def register(body: FlatRegister):
     if body.block.upper() not in ["A", "B", "C", "D", "F"]:
         raise HTTPException(400, "Invalid Block.")
 
-    existing_account = await accounts.find_one(
-        {"email": email},
-        {"_id": 0},
+    existing = await accounts.find_one(
+        {
+            "email": email
+        },
+        {
+            "_id": 0
+        }
     )
 
-    if existing_account:
+    if existing:
         raise HTTPException(400, "Email already registered.")
 
-    existing_request = await registration_requests.find_one(
-        {
-            "email": email,
-            "status": "PENDING",
-        },
-        {"_id": 0},
-    )
+    account = {
 
-    if existing_request:
-        raise HTTPException(
-            400,
-            "Registration already pending committee approval.",
-        )
-
-    request = {
         "id": str(uuid.uuid4()),
 
         "role": body.role,
@@ -1238,19 +1132,63 @@ async def register(body: FlatRegister):
 
         "pin_hash": hash_pin(body.pin),
 
-        "status": "PENDING",
+        "status": "ACTIVE",
 
-        "approved": False,
+        "approved": True,
 
         "created_at": datetime.now(timezone.utc).isoformat(),
+
     }
 
-    await registration_requests.insert_one(request)
+    await accounts.insert_one(account)
+
+    flat = await db.flats.find_one(
+        {
+            "block": body.block.upper(),
+            "flat_no": str(body.flat_no)
+        }
+    )
+
+    if not flat:
+
+        await db.flats.insert_one({
+
+            "id": str(uuid.uuid4()),
+
+            "block": body.block.upper(),
+
+            "flat_no": str(body.flat_no),
+
+            "bhk_type": body.bhk_type,
+
+            "owner_name": body.owner_name,
+
+            "phone": body.phone,
+
+            "email": email,
+
+            "start_month": datetime.now().strftime("%Y-%m"),
+
+            "corporate_covered": False,
+
+            "corporate_payer_id": None,
+
+            "corporate_payer_name": None,
+
+            "auto_created": False,
+
+            "created_at": datetime.now(timezone.utc).isoformat(),
+
+        })
 
     return {
+
         "success": True,
-        "message": "Registration submitted successfully.",
-        "status": "PENDING",
+
+        "message": "Registration completed successfully.",
+
+        "status": "ACTIVE",
+
     }
 
 @api_router.get("/dues/{block}/{flat_no}")

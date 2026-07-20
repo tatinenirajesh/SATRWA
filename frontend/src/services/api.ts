@@ -11,6 +11,10 @@ async function request<T>(
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   try {
+    console.log("=================================");
+    console.log("API =", API);
+    console.log("URL =", `${API}${url}`);
+    console.log("=================================");
     const response = await fetch(`${API}${url}`, {
       headers: {
         "Content-Type": "application/json",
