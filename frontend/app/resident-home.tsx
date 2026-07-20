@@ -117,16 +117,10 @@ export default function ResidentHome() {
               route="/my-dues"
             />
 
-            <Grid
-              icon="card-outline"
-              title="Maintenance"
-              route="/maintenance"
-            />
-
-            <Grid
-              icon="cash-outline"
-              title="Pay Now"
-              route="/pay"
+           <Grid
+            icon="card-outline"
+            title="Maintenance & Payments"
+            route="/maintenance"
             />
 
             <Grid
@@ -151,12 +145,6 @@ export default function ResidentHome() {
               icon="warning-outline"
               title="Complaints"
               route="/complaints"
-            />
-
-            <Grid
-              icon="people-outline"
-              title="Visitors"
-              route="/visitors"
             />
 
             <Grid

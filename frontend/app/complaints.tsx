@@ -37,22 +37,91 @@ export default function Complaints() {
 
   const [description, setDescription] = useState("");
 
-  function submit() {
+async function submit() {
 
-    if (!subject.trim()) {
+  if (!subject.trim()) {
+    Alert.alert(
+      "Validation",
+      "Enter complaint subject."
+    );
+    return;
+  }
+
+  if (!description.trim()) {
+    Alert.alert(
+      "Validation",
+      "Enter complaint description."
+    );
+    return;
+  }
+
+  try {
+
+    const session =
+      await (await import("@/src/services/session"))
+      .getSession();
+
+    if (!session) {
+
       Alert.alert(
-        "Validation",
-        "Enter complaint subject."
+        "Session Expired",
+        "Please login again."
       );
+
       return;
+
     }
 
-    if (!description.trim()) {
+    const { API } =
+      await import("@/src/theme");
+
+    const res = await fetch(
+
+      `${API}/complaints`,
+
+      {
+
+        method:"POST",
+
+        headers:{
+          "Content-Type":"application/json",
+        },
+
+        body:JSON.stringify({
+
+          block:session.block,
+
+          flat_no:session.flat_no,
+
+          owner_name:session.owner_name,
+
+          email:session.email,
+
+          phone:session.phone,
+
+          complaint_type:type,
+
+          subject,
+
+          description,
+
+        }),
+
+      }
+
+    );
+
+    const data=await res.json();
+
+    if(!res.ok){
+
       Alert.alert(
-        "Validation",
-        "Enter complaint description."
+        "Error",
+        data.detail || "Unable to submit complaint."
       );
+
       return;
+
     }
 
     Alert.alert(
@@ -64,7 +133,18 @@ export default function Complaints() {
 
     setDescription("");
 
+    setType("Electrical");
+
+  } catch(e:any){
+
+    Alert.alert(
+      "Error",
+      e.message
+    );
+
   }
+
+}
 
   return (
 

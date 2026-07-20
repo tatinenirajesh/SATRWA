@@ -166,6 +166,27 @@ MORNING = "MORNING"
 EVENING = "EVENING"
 
 # ---------------- MODELS ----------------
+
+class RequestPinReset(BaseModel):
+    email: str
+
+
+class ResetPin(BaseModel):
+    email: str
+    otp: str
+    new_pin: str
+    confirm_pin: str
+
+class ComplaintRequest(BaseModel):
+    block: str
+    flat_no: str
+    owner_name: str
+    email: str
+    phone: str
+    complaint_type: str
+    subject: str
+    description: str
+
 class GatewayWebhook(BaseModel):
 
     payment_id: str
@@ -4735,6 +4756,117 @@ async def complaint_close(body: ComplaintClose):
 
     }
 
+@api_router.post("/complaints")
+async def create_complaint(body: ComplaintRequest):
+
+    complaint = {
+
+        "id": str(uuid.uuid4()),
+
+        "block": body.block,
+
+        "flat_no": body.flat_no,
+
+        "owner_name": body.owner_name,
+
+        "email": body.email,
+
+        "phone": body.phone,
+
+        "complaint_type": body.complaint_type,
+
+        "subject": body.subject,
+
+        "description": body.description,
+
+        "status": "OPEN",
+
+        "created_at": datetime.now(timezone.utc).isoformat(),
+
+    }
+
+    await db.complaints.insert_one(complaint)
+
+    # TODO
+    # send acknowledgement email to resident
+
+    # TODO
+    # send complaint email to admin
+
+    return {
+        "success": True,
+    }
+
+@api_router.post("/auth/request-pin-reset")
+async def request_pin_reset(body: RequestPinReset):
+
+    email = normalize_email(body.email)
+
+    account = await accounts.find_one(
+        {"email": email},
+        {"_id": 0},
+    )
+
+    if not account:
+        raise HTTPException(
+            404,
+            "Email not registered."
+        )
+
+    otp = generate_otp()
+
+    save_otp(email, otp)
+
+    send_otp(email, otp)
+
+    return {
+        "success": True,
+        "message": "OTP sent successfully."
+    }
+
+@api_router.post("/auth/reset-pin")
+async def reset_pin(body: ResetPin):
+
+    email = normalize_email(body.email)
+
+    if body.new_pin != body.confirm_pin:
+        raise HTTPException(
+            400,
+            "PINs do not match."
+        )
+
+    account = await accounts.find_one(
+        {"email": email},
+        {"_id": 0},
+    )
+
+    if not account:
+        raise HTTPException(
+            404,
+            "Email not registered."
+        )
+
+    if not verify_otp(email, body.otp):
+        raise HTTPException(
+            400,
+            "Invalid or expired OTP."
+        )
+
+    await accounts.update_one(
+        {"id": account["id"]},
+        {
+            "$set": {
+                "pin_hash": hash_pin(body.new_pin),
+                "failed_attempts": 0,
+                "locked_until": None,
+            }
+        },
+    )
+
+    return {
+        "success": True,
+        "message": "PIN reset successfully."
+    }
 
 
 app.include_router(api_router)
