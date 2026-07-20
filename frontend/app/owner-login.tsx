@@ -142,7 +142,7 @@ export default function OwnerLogin() {
             <BrandLogo size={70}/>
 
             <Text style={styles.title}>
-              Owner Login
+              Owner Login Test
             </Text>
 
             <Text style={styles.subtitle}>
@@ -242,15 +242,13 @@ export default function OwnerLogin() {
 
           </Pressable>
 
-          <Pressable
-            style={styles.forgot}
-            onPress={() =>
-              Alert.alert(
-                "Coming Soon",
-                "Forgot PIN will be available shortly."
-              )
-            }
-          >
+         <Pressable
+          style={styles.forgot}
+          onPress={() =>
+            router.push("/forgot-pin")
+          }
+        >
+
 
             <Text style={styles.forgotText}>
               Forgot PIN?
