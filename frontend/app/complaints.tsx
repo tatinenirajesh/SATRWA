@@ -77,7 +77,7 @@ async function submit() {
 
     const res = await fetch(
 
-      `${API}/complaints`,
+      `${API}/api/complaints`,
 
       {
 

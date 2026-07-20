@@ -18,35 +18,48 @@ export default function ForgotPin(){
     const[newPin,setNewPin]=useState("");
     const[confirmPin,setConfirmPin]=useState("");
     const[otpSent,setOtpSent]=useState(false);
+    const [loading, setLoading] = useState(false);
 
-    async function sendOTP(){
+    async function sendOTP() {
 
-        const r=await fetch(
-            `${API}/api/auth/request-pin-reset`,
-            {
-                method:"POST",
-                headers:{
-                    "Content-Type":"application/json"
-                },
-                body:JSON.stringify({
-                    email
-                })
+        if (loading) return;
+
+        setLoading(true);
+
+        try {
+
+            const r = await fetch(
+                `${API}/auth/request-pin-reset`,
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":"application/json"
+                    },
+                    body:JSON.stringify({
+                        email
+                    })
+                }
+            );
+
+            const d = await r.json();
+
+            if(!r.ok){
+                Alert.alert("Error", d.detail);
+                return;
             }
-        );
 
-        const d=await r.json();
+            setOtpSent(true);
 
-        if(!r.ok){
+            Alert.alert(
+                "Success",
+                "OTP sent successfully."
+            );
 
-            Alert.alert("Error",d.detail);
-            return;
+        } finally {
+
+            setLoading(false);
 
         }
-
-        setOtpSent(true);
-
-        Alert.alert("Success","OTP sent.");
-
     }
 
     async function resetPin(){
@@ -109,9 +122,10 @@ export default function ForgotPin(){
                 <Pressable
                     style={styles.button}
                     onPress={sendOTP}
+                    disabled={loading}
                 >
                     <Text style={styles.text}>
-                        Send OTP
+                        {loading ? "Sending..." : "Send OTP"}
                     </Text>
                 </Pressable>
             ):(
