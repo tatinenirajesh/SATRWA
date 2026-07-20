@@ -29,6 +29,7 @@ from payment_engine import (
     payment_success,
     payment_failed,
 )
+from pdf_generator import generate_gate_pass
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
@@ -459,24 +460,20 @@ class CorporatePay(BaseModel):
     txn_ref: Optional[str] = ""
     upi_id: Optional[str] = ""
 
-class GatePassRequest(BaseModel):
-    block: str
-    flat_no: str
-    conveyance_receipt_no: str
-    requested_by: Literal["individual", "corporate"] = "individual"
-    corporate_payer_id: Optional[str] = None
-
-class GatePassAction(BaseModel):
-    pass_id: str
-    pin: str
-    reason: Optional[str] = ""
-
 class RecoveryRequest(BaseModel):
     account_type: Literal["individual", "corporate"]
     email: str
     block: Optional[str] = None
     flat_no: Optional[str] = None
     name: Optional[str] = None
+
+class GatePassRequest(BaseModel):
+    resident_email: str
+    block: str
+    flat_no: str
+    move_out_date: str
+    vehicle_number: str
+    reason: str
 
 # ---------------- HELPERS ----------------
 
@@ -4944,6 +4941,136 @@ async def reset_pin(body: ResetPin):
         "message": "PIN reset successfully."
     }
 
+@api_router.post("/gate-pass/check")
+async def check_gate_pass(body: GatePassRequest):
+
+    flat = await get_flat(body.block, body.flat_no)
+
+    dues = await compute_dues(flat)
+
+    total_due = dues["total_due"]
+
+    if total_due > 0:
+
+        return {
+            "eligible": False,
+            "due": total_due
+        }
+
+    return {
+
+    "eligible":True,
+
+    "amount":250,
+
+    "gateway":"ICICI"
+
+}   
+@api_router.post("/gate-pass/pay")
+async def pay_gate_pass(body: GatePassRequest):
+
+    flat = await get_flat(
+        body.block,
+        body.flat_no,
+    )
+
+    gate_pass_no = (
+        f"GP-{datetime.now().strftime('%Y%m%d')}-"
+        f"{uuid.uuid4().hex[:5].upper()}"
+    )
+
+    doc = {
+
+        "id": str(uuid.uuid4()),
+
+        "gate_pass_no": gate_pass_no,
+
+        "resident_email": body.resident_email,
+
+        "block": body.block,
+
+        "flat_no": body.flat_no,
+
+        "owner_name": flat.get("owner_name", ""),
+
+        "phone": flat.get("phone", ""),
+
+        "move_out_date": body.move_out_date,
+
+        "vehicle_number": body.vehicle_number,
+
+        "reason": body.reason,
+
+        "conveyance_amount": 250,
+
+        "payment_status": "SUCCESS",
+
+        "payment_reference":
+            f"TEST-{uuid.uuid4().hex[:8].upper()}",
+
+        "generated_at":
+            datetime.now(timezone.utc).isoformat(),
+
+        "status": "GENERATED",
+
+        "cleanup_status": "PENDING",
+
+        "cleanup_completed_at": None,
+
+    }
+
+    pdf_path = generate_gate_pass(doc)
+
+    doc["pdf_path"] = pdf_path
+
+    await db.gate_passes.insert_one(doc)
+
+    return doc
+
+@api_router.get("/gate-pass/history/{email}")
+async def gate_pass_history(email:str):
+
+    data=[]
+
+    async for x in db.gate_passes.find(
+
+        {
+            "resident_email":email
+        },
+
+        {
+            "_id":0
+        }
+
+    ):
+
+        data.append(x)
+
+    return data
+
+@api_router.get("/gate-pass/view/{gate_pass_no}")
+async def view_gate_pass(gate_pass_no:str):
+
+    gp = await db.gate_passes.find_one(
+
+        {
+            "gate_pass_no":gate_pass_no
+        },
+
+        {
+            "_id":0
+        }
+
+    )
+
+    if not gp:
+
+        raise HTTPException(
+            404,
+            "Gate Pass not found."
+        )
+
+    return gp
 
 app.include_router(api_router)
 
