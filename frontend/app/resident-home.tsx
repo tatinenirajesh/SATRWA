@@ -156,7 +156,7 @@ export default function ResidentHome() {
             <Grid
               icon="shield-checkmark-outline"
               title="Gate Pass"
-              route="/gatepass"
+              route="/gate-pass"
             />
 
           </View>
