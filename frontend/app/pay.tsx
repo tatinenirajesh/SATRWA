@@ -32,6 +32,8 @@ export default function Pay() {
   const [processing, setProcessing] = useState(false);
   const [status, setStatus] = useState<"idle" | "processing" | "done">("idle");
   const [copied, setCopied] = useState(false);
+  const [step, setStep] = useState<Step>("pay");
+  const [refNo, setRefNo] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -273,15 +275,72 @@ export default function Pay() {
         <View style={{ height: 40 }} />
       </KeyboardAwareScrollView>
 
-function UpiAppBtn({ label, color, letter, onPress, testID }: {
-  label: string; color: string; letter: string; onPress: () => void; testID: string;
-}) {
+      <KeyboardStickyView offset={{ opened: 0, closed: 0 }}>
+  <View style={styles.footer}>
+    <Pressable
+      style={styles.payBtn}
+      disabled={processing}
+      onPress={
+        step === "pay"
+          ? () => setStep("confirm")
+          : confirmPayment
+      }
+    >
+      {processing ? (
+        <ActivityIndicator color="#fff" />
+      ) : (
+        <Text style={styles.payBtnText}>
+          {step === "pay"
+            ? "I HAVE PAID"
+            : "CONFIRM PAYMENT"}
+        </Text>
+      )}
+    </Pressable>
+  </View>
+</KeyboardStickyView>
+
+     </View>
+  );
+}
+
+type UpiAppBtnProps = {
+  label: string;
+  color: string;
+  letter: string;
+  onPress: () => void;
+  testID: string;
+};
+
+function UpiAppBtn({
+  label,
+  color,
+  letter,
+  onPress,
+  testID,
+}: UpiAppBtnProps) {
   return (
-    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => [styles.appBtn, pressed && { opacity: 0.85 }]}>
-      <View style={[styles.appLogo, { backgroundColor: color }]}>
-        <Text style={styles.appLetter}>{letter}</Text>
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.appBtn,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View
+        style={[
+          styles.appLogo,
+          { backgroundColor: color },
+        ]}
+      >
+        <Text style={styles.appLetter}>
+          {letter}
+        </Text>
       </View>
-      <Text style={styles.appLabel}>{label}</Text>
+
+      <Text style={styles.appLabel}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

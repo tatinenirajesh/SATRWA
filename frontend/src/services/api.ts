@@ -123,7 +123,7 @@ export async function maintenanceSummary(
   email: string,
 ) {
   return request(
-    `/maintenance/summary?email=${encodeURIComponent(email)}`
+    `/api/maintenance/summary?email=${encodeURIComponent(email)}`
   );
 }
 
@@ -131,7 +131,7 @@ export async function maintenanceHistory(
     email:string,
 ){
     return request(
-        `/maintenance/history?email=${encodeURIComponent(email)}`
+        `/api/maintenance/history?email=${encodeURIComponent(email)}`
     );
 }
 

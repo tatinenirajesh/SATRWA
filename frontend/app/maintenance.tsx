@@ -32,8 +32,7 @@ export default function MaintenanceScreen() {
 
   const [loading,setLoading]=useState(true);
   const [summary,setSummary]=useState<any>(null);
-  const [session,setSession]=useState<Session|null>(null);
-
+  
   useEffect(()=>{
     load();
   },[]);
@@ -51,39 +50,38 @@ export default function MaintenanceScreen() {
 
     }
 
-    setSession(s);
+    
+const res = await maintenanceSummary(s.email);
 
-    const res = await maintenanceSummary(
-      s.email
-    );
-    console.log("Maintenance Response");
-    console.log(JSON.stringify(res, null, 2));
+console.log("========== Maintenance ==========");
+console.log(JSON.stringify(res, null, 2));
+console.log("================================");
 
-    if(!res.ok){
+if (!res.ok) {
 
-      Alert.alert(
-        "Error",
-        res.error || "Unable to load maintenance."
-      );
+  console.log("Maintenance Error:", res.error);
 
-      return;
+  Alert.alert(
+    "Error",
+    res.error || "Unable to load maintenance."
+  );
 
-    }
+  return;
+}
 
-    setSummary(res.data);
+setSummary(res.data);
+} catch (e: any) {
 
-  }catch(e:any){
+  Alert.alert(
+    "Error",
+    e.message
+  );
 
-    Alert.alert(
-      "Error",
-      e.message
-    );
+} finally {
 
-  }finally{
+  setLoading(false);
 
-    setLoading(false);
-
-  }
+}
 
 }
     function payNow(){

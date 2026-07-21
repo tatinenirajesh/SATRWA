@@ -30,6 +30,21 @@ from payment_engine import (
     payment_failed,
 )
 from pdf_generator import generate_gate_pass
+from email_service import send_complaint_notification
+from email_service import send_gatepass_denied_notification
+from email_service import send_gatepass_generated_notification
+from email_service import (
+    send_complaint_to_admin,
+    send_complaint_to_resident,
+)
+from email_service import (
+    send_gatepass_denied_admin,
+    send_gatepass_denied_resident,
+)
+from email_service import (
+    send_gatepass_generated_admin,
+    send_gatepass_generated_resident,
+)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
@@ -4754,9 +4769,18 @@ async def complaint_close(body: ComplaintClose):
 @api_router.post("/complaints")
 async def create_complaint(body: ComplaintRequest):
 
-    complaint = {
+    complaint_id = (
+        "CMP-"
+        + datetime.now().strftime("%Y%m%d")
+        + "-"
+        + uuid.uuid4().hex[:5].upper()
+    )
+
+    doc = {
 
         "id": str(uuid.uuid4()),
+
+        "complaint_id": complaint_id,
 
         "block": body.block,
 
@@ -4776,20 +4800,52 @@ async def create_complaint(body: ComplaintRequest):
 
         "status": "OPEN",
 
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
 
     }
 
-    await db.complaints.insert_one(complaint)
+    await db.complaints.insert_one(doc)
 
-    # TODO
-    # send acknowledgement email to resident
+    # -----------------------------------
+    # Notify Resident
+    # -----------------------------------
 
-    # TODO
-    # send complaint email to admin
+    try:
+
+        send_complaint_to_resident(doc)
+
+    except Exception as e:
+
+        print(
+            "Resident Complaint Email Failed:",
+            e,
+        )
+
+    # -----------------------------------
+    # Notify Admin
+    # -----------------------------------
+
+    try:
+
+        send_complaint_to_admin(doc)
+
+    except Exception as e:
+
+        print(
+            "Admin Complaint Email Failed:",
+            e,
+        )
 
     return {
+
         "success": True,
+
+        "complaint_id": complaint_id,
+
+        "message": "Complaint submitted successfully."
+
     }
 
 @api_router.post("/auth/request-pin-reset")
@@ -4866,28 +4922,79 @@ async def reset_pin(body: ResetPin):
 @api_router.post("/gate-pass/check")
 async def check_gate_pass(body: GatePassRequest):
 
-    flat = await get_flat(body.block, body.flat_no)
+    flat = await get_flat(
+        body.block,
+        body.flat_no,
+    )
+
+    if not flat:
+
+        raise HTTPException(
+            404,
+            "Flat not found."
+        )
 
     dues = await compute_dues(flat)
 
     total_due = dues["total_due"]
 
+    # ---------------------------------
+    # Outstanding dues
+    # ---------------------------------
+
     if total_due > 0:
 
+        # Resident Email
+        try:
+
+            send_gatepass_denied_resident(
+                body.resident_email,
+                total_due,
+            )
+
+        except Exception as e:
+
+            print(
+                "Resident Gate Pass Email Failed:",
+                e,
+            )
+
+        # Admin Email
+        try:
+
+            send_gatepass_denied_admin(
+                body,
+                total_due,
+            )
+
+        except Exception as e:
+
+            print(
+                "Admin Gate Pass Email Failed:",
+                e,
+            )
+
         return {
+
             "eligible": False,
-            "due": total_due
+
+            "due": total_due,
+
         }
+
+    # ---------------------------------
+    # Eligible
+    # ---------------------------------
 
     return {
 
-    "eligible":True,
+        "eligible": True,
 
-    "amount":250,
+        "amount": 250,
 
-    "gateway":"ICICI"
+        "gateway": "ICICI",
 
-}   
+    }   
 @api_router.post("/gate-pass/pay")
 async def pay_gate_pass(body: GatePassRequest):
 
@@ -4896,9 +5003,23 @@ async def pay_gate_pass(body: GatePassRequest):
         body.flat_no,
     )
 
+    if not flat:
+
+        raise HTTPException(
+            404,
+            "Flat not found."
+        )
+
     gate_pass_no = (
-        f"GP-{datetime.now().strftime('%Y%m%d')}-"
-        f"{uuid.uuid4().hex[:5].upper()}"
+        "GP-"
+        + datetime.now().strftime("%Y%m%d")
+        + "-"
+        + uuid.uuid4().hex[:5].upper()
+    )
+
+    payment_reference = (
+        "TEST-"
+        + uuid.uuid4().hex[:8].upper()
     )
 
     doc = {
@@ -4927,11 +5048,11 @@ async def pay_gate_pass(body: GatePassRequest):
 
         "payment_status": "SUCCESS",
 
-        "payment_reference":
-            f"TEST-{uuid.uuid4().hex[:8].upper()}",
+        "payment_reference": payment_reference,
 
-        "generated_at":
-            datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
 
         "status": "GENERATED",
 
@@ -4941,13 +5062,63 @@ async def pay_gate_pass(body: GatePassRequest):
 
     }
 
+    # ------------------------------------
+    # Generate PDF
+    # ------------------------------------
+
     pdf_path = generate_gate_pass(doc)
 
     doc["pdf_path"] = pdf_path
 
+    # ------------------------------------
+    # Save Mongo
+    # ------------------------------------
+
     await db.gate_passes.insert_one(doc)
 
-    return doc
+    # ------------------------------------
+    # Email Resident
+    # ------------------------------------
+
+    try:
+
+        send_gatepass_generated_resident(doc)
+
+    except Exception as e:
+
+        print(
+            "Resident Gate Pass Email Failed:",
+            e,
+        )
+
+    # ------------------------------------
+    # Email Admin
+    # ------------------------------------
+
+    try:
+
+        send_gatepass_generated_admin(doc)
+
+    except Exception as e:
+
+        print(
+            "Admin Gate Pass Email Failed:",
+            e,
+        )
+
+    return {
+
+        "success": True,
+
+        "gate_pass_no": gate_pass_no,
+
+        "payment_reference": payment_reference,
+
+        "pdf_path": pdf_path,
+
+        "message": "Gate Pass generated successfully.",
+
+    }
 
 @api_router.get("/gate-pass/history/{email}")
 async def gate_pass_history(email:str):
