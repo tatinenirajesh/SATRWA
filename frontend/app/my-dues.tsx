@@ -1,125 +1,170 @@
-import React,{useEffect,useState} from "react";
+import React, { useEffect, useState } from "react";
 import {
-View,
-Text,
-StyleSheet,
-Pressable
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
-import {API,COLORS} from "@/src/theme";
+import {
+  COLORS,
+  SPACING,
+  RADIUS,
+  FONTS,
+} from "@/src/theme";
 
-import { getSession } from "@/src/services/session";
+import {
+  getSession,
+} from "@/src/services/session";
 
-export default function MyDues(){
+import {
+  maintenanceSummary,
+} from "@/src/services/api";
 
-const [dues,setDues]=useState<any>();
+export default function MyDues() {
 
-useEffect(()=>{
+  const [loading,setLoading]=useState(true);
+  const [summary,setSummary]=useState<any>(null);
 
-load();
+  useEffect(()=>{
+    load();
+  },[]);
 
-},[]);
+  async function load(){
 
-async function load(){
+    const session=await getSession();
 
-const session = await getSession();
+    if(!session){
+      router.replace("/");
+      return;
+    }
 
-if (!session) {
-  Alert.alert("Session Expired", "Please login again.");
-  router.replace("/");
-  return;
-}
+    const res=await maintenanceSummary(session.email);
 
-const block = session.block;
-const flat_no = session.flat_no;
+    if(res.ok){
+      setSummary(res.data);
+    }
 
-const r=await fetch(
+    setLoading(false);
 
-`${API}/api/resident/my-dues?block=${block}&flat_no=${flat}`
+  }
 
-);
+  if(loading){
 
-setDues(await r.json());
+    return(
+      <SafeAreaView style={styles.loading}>
+        <ActivityIndicator
+          size="large"
+          color={COLORS.brand}
+        />
+      </SafeAreaView>
+    );
 
-}
+  }
 
-if(!dues){
+  return(
 
-return null;
+    <SafeAreaView style={styles.container}>
 
-}
+      <ScrollView
+        contentContainerStyle={styles.body}
+      >
 
-return(
+        <Pressable
+          onPress={()=>router.back()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={28}
+            color={COLORS.brand}
+          />
+        </Pressable>
 
-<View style={styles.container}>
+        <Text style={styles.title}>
+          My Dues
+        </Text>
 
-<Text style={styles.title}>
-My Dues
-</Text>
+        {summary?.total_due>0?(
+          <>
 
-<Row
-title="Current Month"
-value={dues.current_month}
-/>
+            <View style={styles.card}>
 
-<Row
-title="Previous Due"
-value={dues.previous_due}
-/>
+              <Text style={styles.label}>
+                Outstanding Amount
+              </Text>
 
-<Row
-title="Late Fee"
-value={dues.late_fee}
-/>
+              <Text style={styles.amount}>
+                ₹ {summary.total_due}
+              </Text>
 
-<Row
-title="Conveyance"
-value={dues.conveyance}
-/>
+            </View>
 
-<View style={styles.total}>
+            <View style={styles.card}>
 
-<Text style={styles.totalText}>
-Total
-</Text>
+              <Text style={styles.row}>
+                Pending Months : {summary.pending_count}
+              </Text>
 
-<Text style={styles.totalText}>
-₹{dues.total_due}
-</Text>
+              <Text style={styles.row}>
+                Maintenance : ₹ {summary.maintenance_total}
+              </Text>
 
-</View>
+              <Text style={styles.row}>
+                Late Fee : ₹ {summary.late_fee_total}
+              </Text>
 
-<Pressable
-style={styles.button}
->
+              <Text style={styles.row}>
+                Opening Due : ₹ {summary.opening_due_remaining}
+              </Text>
 
-<Text style={styles.pay}>
-PAY NOW
-</Text>
+            </View>
 
-</Pressable>
+            <Pressable
+              style={styles.pay}
+              onPress={()=>router.push("/maintenance")}
+            >
 
-</View>
+              <Text style={styles.payText}>
+                PAY NOW
+              </Text>
 
-);
+            </Pressable>
 
-}
+          </>
+        ):(
+          <View style={styles.successCard}>
 
-function Row({title,value}:any){
+            <Ionicons
+              name="checkmark-circle"
+              size={70}
+              color="#3CB371"
+            />
 
-return(
+            <Text style={styles.successTitle}>
+              Hooray!
+            </Text>
 
-<View style={styles.row}>
+            <Text style={styles.successText}>
+              You have no outstanding maintenance dues.
+            </Text>
 
-<Text>{title}</Text>
+            <Text style={styles.successText}>
+              Thank you for paying on time.
+            </Text>
 
-<Text>
-₹{value}
-</Text>
+          </View>
+        )}
 
-</View>
+      </ScrollView>
 
-);
+    </SafeAreaView>
+
+  );
 
 }
 
@@ -127,45 +172,87 @@ const styles=StyleSheet.create({
 
 container:{
 flex:1,
-padding:20,
-backgroundColor:"#fff"
+backgroundColor:COLORS.surface,
+},
+
+body:{
+padding:SPACING.xl,
+paddingBottom:50,
+},
+
+loading:{
+flex:1,
+justifyContent:"center",
+alignItems:"center",
+backgroundColor:COLORS.surface,
 },
 
 title:{
-fontSize:26,
+fontSize:30,
+fontFamily:FONTS.serif,
+color:COLORS.brand,
+marginVertical:20,
+},
+
+card:{
+backgroundColor:COLORS.surfaceSecondary,
+padding:20,
+borderRadius:RADIUS.lg,
+marginBottom:20,
+},
+
+label:{
+fontSize:18,
+color:COLORS.muted,
+},
+
+amount:{
+fontSize:40,
 fontWeight:"700",
-marginBottom:20
+color:"#E53935",
+marginTop:10,
 },
 
 row:{
-flexDirection:"row",
-justifyContent:"space-between",
-paddingVertical:12
-},
-
-total:{
-marginTop:25,
-borderTopWidth:1,
-paddingTop:20,
-flexDirection:"row",
-justifyContent:"space-between"
-},
-
-totalText:{
-fontWeight:"700",
-fontSize:20
-},
-
-button:{
-marginTop:40,
-backgroundColor:COLORS.brand,
-padding:18,
-borderRadius:12
+fontSize:17,
+marginBottom:12,
+color:COLORS.onSurface,
 },
 
 pay:{
+backgroundColor:COLORS.brand,
+padding:18,
+borderRadius:RADIUS.md,
+alignItems:"center",
+},
+
+payText:{
+fontSize:18,
+fontWeight:"700",
+color:"#000",
+},
+
+successCard:{
+backgroundColor:COLORS.surfaceSecondary,
+padding:35,
+borderRadius:RADIUS.lg,
+alignItems:"center",
+marginTop:20,
+},
+
+successTitle:{
+fontSize:30,
+fontWeight:"700",
+marginTop:20,
+marginBottom:15,
+color:"#3CB371",
+},
+
+successText:{
+fontSize:17,
 textAlign:"center",
-fontWeight:"700"
-}
+marginBottom:10,
+color:COLORS.onSurface,
+},
 
 });

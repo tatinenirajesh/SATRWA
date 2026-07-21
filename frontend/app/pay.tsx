@@ -29,8 +29,6 @@ export default function Pay() {
 
   const [session, setSession] = useState<any>(null);
   const [upiInfo, setUpiInfo] = useState<any>(null);
-  const [step, setStep] = useState<Step>("pay");
-  const [refNo, setRefNo] = useState("");
   const [processing, setProcessing] = useState(false);
   const [status, setStatus] = useState<"idle" | "processing" | "done">("idle");
   const [copied, setCopied] = useState(false);
@@ -274,36 +272,6 @@ export default function Pay() {
 
         <View style={{ height: 40 }} />
       </KeyboardAwareScrollView>
-
-      {step === "confirm" && (
-        <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
-          <SafeAreaView edges={["bottom"]} style={styles.footer}>
-            <Pressable
-              testID="i-have-paid-btn"
-              onPress={confirmPayment}
-              disabled={processing || status === "done" || !refNo.trim()}
-              style={[styles.payBtn, (processing || status === "done" || !refNo.trim()) && { opacity: 0.7 }]}
-            >
-              {status === "processing" ? (
-                <ActivityIndicator color={COLORS.onBrand} />
-              ) : status === "done" ? (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color={COLORS.onBrand} />
-                  <Text style={styles.payBtnText}>Saved</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={18} color={COLORS.onBrand} />
-                  <Text style={styles.payBtnText}>Confirm Payment</Text>
-                </>
-              )}
-            </Pressable>
-          </SafeAreaView>
-        </KeyboardStickyView>
-      )}
-    </View>
-  );
-}
 
 function UpiAppBtn({ label, color, letter, onPress, testID }: {
   label: string; color: string; letter: string; onPress: () => void; testID: string;
