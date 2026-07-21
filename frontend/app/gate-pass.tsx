@@ -108,15 +108,22 @@ export default function GatePass() {
 
         setLoading(false);
 
-        Alert.alert(
+       Alert.alert(
+  "Outstanding Due",
+  `₹${eligibility.due}
 
-          "Gate Pass Denied",
-
-          `Outstanding Due : ₹${eligibility.due}
-
-Please clear all dues before generating Gate Pass.`
-
-        );
+Please clear all maintenance dues before generating your Move Out Gate Pass.`,
+  [
+    {
+      text: "Cancel",
+      style: "cancel",
+    },
+    {
+      text: "Clear Dues",
+      onPress: () => router.push("/maintenance"),
+    },
+  ]
+);
 
         return;
 
@@ -273,6 +280,7 @@ ${gp.gate_pass_no}`,
         <TextInput
           style={styles.input}
           placeholder="DD-MM-YYYY"
+          placeholderTextColor="#666"
           value={moveDate}
           onChangeText={setMoveDate}
         />
@@ -284,6 +292,7 @@ ${gp.gate_pass_no}`,
         <TextInput
           style={styles.input}
           placeholder="AP39AB1234"
+          placeholderTextColor="#666"
           autoCapitalize="characters"
           value={vehicleNumber}
           onChangeText={(x) => setVehicleNumber(x.toUpperCase())}
@@ -299,6 +308,7 @@ ${gp.gate_pass_no}`,
           numberOfLines={5}
           textAlignVertical="top"
           placeholder="Enter Reason"
+          placeholderTextColor="#666"
           value={reason}
           onChangeText={setReason}
         />
@@ -367,20 +377,22 @@ const styles = StyleSheet.create({
     color: COLORS.onSurface,
   },
 
-  input: {
+input: {
     backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.md,
     padding: 16,
     marginBottom: 15,
-  },
+    color: COLORS.onSurface,
+},
 
-  reason: {
+reason: {
     backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.md,
     padding: 16,
     height: 140,
     marginBottom: 25,
-  },
+    color: COLORS.onSurface,
+},
 
   button: {
     backgroundColor: COLORS.brand,

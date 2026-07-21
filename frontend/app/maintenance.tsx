@@ -40,41 +40,63 @@ export default function MaintenanceScreen() {
 
   async function load(){
 
-    try{
+  try{
 
-      const s=await getSession();
+    const s = await getSession();
 
-      if(!s){
-        router.replace("/");
-        return;
-      }
+    if(!s){
 
-      setSession(s);
-
-      const data=await maintenanceSummary(s.email);
-
-      setSummary(data);
-
-    }catch(e:any){
-
-      Alert.alert("Error",e.message);
-
-    }finally{
-
-      setLoading(false);
+      router.replace("/");
+      return;
 
     }
 
-  }
+    setSession(s);
 
-  function payNow(){
+    const res = await maintenanceSummary(
+      s.email
+    );
+    console.log("Maintenance Response");
+    console.log(JSON.stringify(res, null, 2));
+
+    if(!res.ok){
+
+      Alert.alert(
+        "Error",
+        res.error || "Unable to load maintenance."
+      );
+
+      return;
+
+    }
+
+    setSummary(res.data);
+
+  }catch(e:any){
 
     Alert.alert(
-      "ICICI Payment Gateway",
-      "Gateway integration is under progress."
+      "Error",
+      e.message
     );
 
+  }finally{
+
+    setLoading(false);
+
   }
+
+}
+    function payNow(){
+
+        Alert.alert(
+
+            "Online Payment",
+
+            "ICICI Payment Gateway integration is under progress.\n\nThis button will directly open the payment gateway in the next release."
+
+        );
+
+    }
 
   if(loading){
 
