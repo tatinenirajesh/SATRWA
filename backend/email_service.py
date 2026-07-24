@@ -13,6 +13,9 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
 
 def send_email(to_email, subject, body):
+        
+    print("SENDING EMAIL TO:", to_email)
+    print("SUBJECT:", subject)
 
     msg = MIMEMultipart()
 
