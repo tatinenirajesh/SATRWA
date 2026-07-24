@@ -1,9 +1,14 @@
 import os
 import smtplib
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Always load .env
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
 
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -11,6 +16,12 @@ SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
+print("=" * 50)
+print("EMAIL SERVICE LOADED")
+print("SMTP_SERVER :", SMTP_SERVER)
+print("SMTP_EMAIL  :", SMTP_EMAIL)
+print("ADMIN_EMAIL :", ADMIN_EMAIL)
+print("=" * 50)
 
 def send_email(to_email, subject, body):
         
