@@ -4812,31 +4812,41 @@ async def create_complaint(body: ComplaintRequest):
     # Notify Resident
     # -----------------------------------
 
-    try:
+print(">>> ABOUT TO SEND RESIDENT COMPLAINT EMAIL")
 
-        send_complaint_to_resident(doc)
+try:
 
-    except Exception as e:
+    send_complaint_to_resident(doc)
 
-        print(
-            "Resident Complaint Email Failed:",
-            e,
-        )
+    print(">>> RESIDENT EMAIL SENT")
+
+except Exception as e:
+
+    import traceback
+
+    print(">>> RESIDENT EMAIL FAILED")
+
+    traceback.print_exc()
 
     # -----------------------------------
     # Notify Admin
     # -----------------------------------
 
-    try:
+    print(">>> ABOUT TO SEND ADMIN COMPLAINT EMAIL")
 
-        send_complaint_to_admin(doc)
+try:
 
-    except Exception as e:
+    send_complaint_to_admin(doc)
 
-        print(
-            "Admin Complaint Email Failed:",
-            e,
-        )
+    print(">>> ADMIN EMAIL SENT")
+
+except Exception as e:
+
+    import traceback
+
+    print(">>> ADMIN EMAIL FAILED")
+
+    traceback.print_exc()
 
     return {
 
