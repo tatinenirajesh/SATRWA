@@ -46,10 +46,21 @@ from email_service import (
     send_gatepass_generated_resident,
 )
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT_DIR / ".env")
+from pathlib import Path
+from dotenv import load_dotenv
+import os
 
-mongo_url = os.environ['MONGO_URL']
+env_path = Path(__file__).resolve().parent / ".env"
+
+print("=" * 60)
+print("ENV PATH :", env_path)
+print("FILE EXISTS :", env_path.exists())
+print("LOAD RESULT :", load_dotenv(env_path))
+print("MONGO_URL :", os.getenv("MONGO_URL"))
+print("=" * 60)
+
+mongo_url = os.environ["MONGO_URL"]
+
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 accounts = db.accounts
@@ -4777,33 +4788,18 @@ async def create_complaint(body: ComplaintRequest):
     )
 
     doc = {
-
         "id": str(uuid.uuid4()),
-
         "complaint_id": complaint_id,
-
         "block": body.block,
-
         "flat_no": body.flat_no,
-
         "owner_name": body.owner_name,
-
         "email": body.email,
-
         "phone": body.phone,
-
         "complaint_type": body.complaint_type,
-
         "subject": body.subject,
-
         "description": body.description,
-
         "status": "OPEN",
-
-        "created_at": datetime.now(
-            timezone.utc
-        ).isoformat(),
-
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
     await db.complaints.insert_one(doc)
@@ -4815,17 +4811,12 @@ async def create_complaint(body: ComplaintRequest):
     print(">>> ABOUT TO SEND RESIDENT COMPLAINT EMAIL")
 
     try:
-
         send_complaint_to_resident(doc)
-
         print(">>> RESIDENT EMAIL SENT")
 
     except Exception:
-
         import traceback
-
         print(">>> RESIDENT EMAIL FAILED")
-
         traceback.print_exc()
 
     # -----------------------------------
@@ -4835,27 +4826,18 @@ async def create_complaint(body: ComplaintRequest):
     print(">>> ABOUT TO SEND ADMIN COMPLAINT EMAIL")
 
     try:
-
         send_complaint_to_admin(doc)
-
         print(">>> ADMIN EMAIL SENT")
 
     except Exception:
-
         import traceback
-
         print(">>> ADMIN EMAIL FAILED")
-
         traceback.print_exc()
 
     return {
-
         "success": True,
-
         "complaint_id": complaint_id,
-
         "message": "Complaint submitted successfully."
-
     }
 
 @api_router.post("/auth/request-pin-reset")
