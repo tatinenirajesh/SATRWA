@@ -31,7 +31,7 @@ export default function LandingScreen() {
 
       if (session) {
 
-        router.replace("/home");
+        router.replace("/resident-home");
 
       }
 

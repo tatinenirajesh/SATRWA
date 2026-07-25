@@ -18,6 +18,23 @@ import {
   FONTS,
 } from "@/src/theme";
 
+import { Stack } from "expo-router";
+
+export default function GatePassScreen() {
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title: "Gate Pass",
+          headerBackVisible: true,
+        }}
+      />
+
+      {/* Existing UI */}
+    </>
+  );
+}
+
 import {
   getSession,
 } from "@/src/services/session";

@@ -1,4 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
+
 import {
   Pressable,
   ScrollView,
@@ -23,14 +29,63 @@ import {
   Session,
 } from "@/src/services/session";
 
+import { BackHandler, ToastAndroid } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+
+console.log("Resident Home Loaded");
+
 export default function ResidentHome() {
 
   const [session, setSession] =
     useState<Session | null>(null);
 
   useEffect(() => {
-    load();
-  }, []);
+    const lastBackPress = useRef(0);
+
+  const lastBackPress = useRef(0);
+
+const onBackPress = useCallback(() => {
+
+  console.log("BACK BUTTON PRESSED");
+
+  const now = Date.now();
+
+  if (now - lastBackPress.current < 2000) {
+
+    console.log("EXIT APP");
+
+    BackHandler.exitApp();
+
+    return true;
+  }
+
+  lastBackPress.current = now;
+
+  ToastAndroid.show(
+    "Press back again to exit",
+    ToastAndroid.SHORT
+  );
+
+  return true;
+
+}, []);
+
+useEffect(() => {
+
+  const sub = BackHandler.addEventListener(
+    "hardwareBackPress",
+    onBackPress
+  );
+
+  return () => sub.remove();
+
+}, [onBackPress]);
+
+useEffect(() => {
+
+  load();
+
+}, []);
 
   async function load() {
 

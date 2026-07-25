@@ -7,8 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
 import { getSession, saveSession, clearSession, Session } from "@/src/services/session";
 import { BrandLogo } from "@/src/components/BrandLogo";
-import { BackHandler, ToastAndroid } from "react-native";
-import { useRef } from "react";
+
 
 export default function Home() {
   const router = useRouter();
@@ -38,46 +37,7 @@ export default function Home() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-    const lastBackPress = useRef(0);
-
-useFocusEffect(
-  useCallback(() => {
-    const onBackPress = () => {
-      const lastBackPress = useRef(0);
-
-      useFocusEffect(
-        useCallback(() => {
-          const onBackPress = () => {
-
-          console.log("BACK BUTTON PRESSED");
-
-          const now = Date.now();
-
-          if (now - lastBackPress.current < 2000) {
-            console.log("EXIT APP");
-            BackHandler.exitApp();
-            return true;
-          }
-
-          lastBackPress.current = now;
-
-          ToastAndroid.show(
-            "Press back again to exit",
-            ToastAndroid.SHORT
-          );
-
-          return true;
-        };
-
-        const sub = BackHandler.addEventListener(
-          "hardwareBackPress",
-          onBackPress
-        );
-
-        return () => sub.remove();
-
-      }, [])
-);
+    
 
       const now = Date.now();
 
