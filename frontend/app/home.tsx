@@ -8,8 +8,7 @@ import { COLORS, SPACING, RADIUS, FONTS, API } from "@/src/theme";
 import { getSession, saveSession, clearSession, Session } from "@/src/services/session";
 import { BrandLogo } from "@/src/components/BrandLogo";
 import { BackHandler, ToastAndroid } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 
 export default function Home() {
   const router = useRouter();
@@ -39,22 +38,46 @@ export default function Home() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onLogout = async () => {
-    await clearSession();
-    router.replace("/");
-  };
-
-  if (loading || !session) {
-    return (
-      <View style={styles.center}><ActivityIndicator color={COLORS.brand} size="large" /></View>
-    );
-  }
-
-  const lastBackPress = useRef(0);
+    const lastBackPress = useRef(0);
 
 useFocusEffect(
   useCallback(() => {
     const onBackPress = () => {
+      const lastBackPress = useRef(0);
+
+      useFocusEffect(
+        useCallback(() => {
+          const onBackPress = () => {
+
+          console.log("BACK BUTTON PRESSED");
+
+          const now = Date.now();
+
+          if (now - lastBackPress.current < 2000) {
+            console.log("EXIT APP");
+            BackHandler.exitApp();
+            return true;
+          }
+
+          lastBackPress.current = now;
+
+          ToastAndroid.show(
+            "Press back again to exit",
+            ToastAndroid.SHORT
+          );
+
+          return true;
+        };
+
+        const sub = BackHandler.addEventListener(
+          "hardwareBackPress",
+          onBackPress
+        );
+
+        return () => sub.remove();
+
+      }, [])
+);
 
       const now = Date.now();
 
@@ -82,6 +105,19 @@ useFocusEffect(
 
   }, [])
 );
+
+  const onLogout = async () => {
+    await clearSession();
+    router.replace("/");
+  };
+
+  if (loading || !session) {
+    return (
+      <View style={styles.center}><ActivityIndicator color={COLORS.brand} size="large" /></View>
+    );
+  }
+
+
 
   const hasDues = !!dues?.has_any_due;
 
