@@ -8,7 +8,7 @@ import {
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 
 import {
   API,
@@ -17,23 +17,6 @@ import {
   RADIUS,
   FONTS,
 } from "@/src/theme";
-
-import { Stack } from "expo-router";
-
-export default function GatePassScreen() {
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: "Gate Pass",
-          headerBackVisible: true,
-        }}
-      />
-
-      {/* Existing UI */}
-    </>
-  );
-}
 
 import {
   getSession,
@@ -278,7 +261,16 @@ ${gp.gate_pass_no}`,
 
   return (
 
-    <SafeAreaView style={styles.container}>
+    <>
+
+      <Stack.Screen
+        options={{
+          title: "Gate Pass",
+          headerBackVisible: true,
+        }}
+      />
+
+      <SafeAreaView style={styles.container}>
 
       <ScrollView contentContainerStyle={styles.body}>
 
@@ -356,6 +348,8 @@ ${gp.gate_pass_no}`,
       </ScrollView>
 
     </SafeAreaView>
+
+  </>
 
   );
 
