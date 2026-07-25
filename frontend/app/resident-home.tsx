@@ -36,64 +36,66 @@ console.log("Resident Home Loaded");
 
 export default function ResidentHome() {
 
-  const [session, setSession] =
-    useState<Session | null>(null);
-
-  useEffect(() => {
-    const lastBackPress = useRef(0);
+  const [session, setSession] = useState<Session | null>(null);
 
   const lastBackPress = useRef(0);
 
-const onBackPress = useCallback(() => {
+  const onBackPress = useCallback(() => {
 
-  console.log("BACK BUTTON PRESSED");
+    console.log("BACK BUTTON PRESSED");
 
-  const now = Date.now();
+    const now = Date.now();
 
-  if (now - lastBackPress.current < 2000) {
+    if (now - lastBackPress.current < 2000) {
 
-    console.log("EXIT APP");
+      BackHandler.exitApp();
 
-    BackHandler.exitApp();
+      return true;
+
+    }
+
+    lastBackPress.current = now;
+
+    ToastAndroid.show(
+      "Press back again to exit",
+      ToastAndroid.SHORT
+    );
 
     return true;
-  }
 
-  lastBackPress.current = now;
+  }, []);
 
-  ToastAndroid.show(
-    "Press back again to exit",
-    ToastAndroid.SHORT
+  useFocusEffect(
+
+    useCallback(() => {
+
+      const sub = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+
+      return () => sub.remove();
+
+    }, [onBackPress])
+
   );
 
-  return true;
+  useEffect(() => {
 
-}, []);
+    load();
 
-useEffect(() => {
-
-  const sub = BackHandler.addEventListener(
-    "hardwareBackPress",
-    onBackPress
-  );
-
-  return () => sub.remove();
-
-}, [onBackPress]);
-
-useEffect(() => {
-
-  load();
-
-}, []);
+  }, []);
 
   async function load() {
 
     const s = await getSession();
 
     if (!s) {
+
       router.replace("/");
+
       return;
+
     }
 
     setSession(s);
@@ -108,7 +110,11 @@ useEffect(() => {
 
   }
 
-  if (!session) return null;
+  if (!session) {
+
+    return null;
+
+  }
 
   return (
 
@@ -166,16 +172,16 @@ useEffect(() => {
 
           <View style={styles.gridContainer}>
 
-              <Grid
+            <Grid
               icon="wallet-outline"
               title="My Dues"
               route="/my-dues"
             />
 
-           <Grid
-            icon="card-outline"
-            title="Maintenance & Payments"
-            route="/maintenance"
+            <Grid
+              icon="card-outline"
+              title="Maintenance & Payments"
+              route="/maintenance"
             />
 
             <Grid
