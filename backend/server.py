@@ -5273,7 +5273,9 @@ async def check_community_hall(body: dict):
 
     balance = await get_outstanding(flat)
 
-    print("OUTSTANDING BALANCE:", outstanding)
+    print("========== BALANCE ==========")
+    print(balance)
+    print("=============================")
 
     if balance["outstanding"] > 0:
           return {
