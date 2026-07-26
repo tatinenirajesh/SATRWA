@@ -50,7 +50,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-env_path = Path(__file__).resolve().parent / ".env"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+env_path = ROOT_DIR / ".env"
+load_dotenv(env_path)
 
 print("=" * 60)
 print("ENV PATH :", env_path)
