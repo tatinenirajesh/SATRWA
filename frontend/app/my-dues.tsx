@@ -98,31 +98,28 @@ export default function MyDues() {
                 Outstanding Amount
               </Text>
 
-              <Text style={styles.amount}>
-                ₹ {summary.total_due}
-              </Text>
+             <Text style={styles.amount}>
+             ₹  {summary.outstanding_balance}
+            </Text>
 
             </View>
 
             <View style={styles.card}>
 
-              <Text style={styles.row}>
-                Pending Months : {summary.pending_count}
-              </Text>
+            <Text style={styles.row}>
+              Monthly Maintenance : ₹ {summary.monthly_charge}
+            </Text>
 
-              <Text style={styles.row}>
-                Maintenance : ₹ {summary.maintenance_total}
-              </Text>
+            <Text style={styles.row}>
+              Credit Balance : ₹ {summary.credit_balance}
+            </Text>
 
-              <Text style={styles.row}>
-                Late Fee : ₹ {summary.late_fee_total}
-              </Text>
-
-              <Text style={styles.row}>
-                Opening Due : ₹ {summary.opening_due_remaining}
-              </Text>
+            <Text style={styles.row}>
+              Current Outstanding : ₹ {summary.total_due}
+            </Text>
 
             </View>
+
 
             <Pressable
               style={styles.pay}
