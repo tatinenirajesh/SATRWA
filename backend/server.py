@@ -772,6 +772,13 @@ async def get_outstanding(flat: dict):
         flat.get("credit_balance", 0)
     )
 
+    print("========== GET OUTSTANDING ==========")
+    print(flat)
+    print("Monthly Charge:", monthly_charge)
+    print("Outstanding:", outstanding)
+    print("Credit:", credit)
+    print("=====================================")
+
     return {
 
         "monthly_charge": monthly_charge,
