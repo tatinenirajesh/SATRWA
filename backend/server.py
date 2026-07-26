@@ -5229,6 +5229,21 @@ async def check_community_hall(body: dict):
 async def debug_collections():
     return await db.list_collection_names()
 
+@api_router.get("/debug/flat")
+async def debug_flat():
+
+    flat = await db.flats.find_one(
+        {
+            "block": "B",
+            "flat_no": "506"
+        },
+        {
+            "_id": 0
+        }
+    )
+
+    return flat
+
 app.include_router(api_router)
 
 app.add_middleware(
