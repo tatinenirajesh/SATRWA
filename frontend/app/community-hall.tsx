@@ -288,16 +288,27 @@ onPress={async () => {
     booking_date: bookingDate.toISOString().split("T")[0],
     });
 
-    if (!res.available) {
+if (!res.available) {
 
-        Alert.alert(
-            "Already Booked",
-            res.message
-        );
+    Alert.alert(
+        "Booking Not Allowed",
+        res.message,
+        [
+            {
+                text: "Cancel",
+                style: "cancel",
+            },
+            {
+                text: "Pay Now",
+                onPress: () => {
+                    router.push(res.redirect || "/maintenance");
+                },
+            },
+        ]
+    );
 
-        return;
-
-    }
+    return;
+}
 
     Alert.alert(
         "Available",

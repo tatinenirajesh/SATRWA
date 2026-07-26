@@ -5199,7 +5199,8 @@ async def check_community_hall(body: dict):
         return {
             "available": False,
             "reason": "DUE",
-            "message": "Outstanding maintenance dues must be cleared before booking any amenity."
+            "message": "Outstanding maintenance dues must be cleared before booking any amenity.",
+            "redirect": "/maintenance"
         }
 
     unpaid = await db.amenity_invoices.find_one({
