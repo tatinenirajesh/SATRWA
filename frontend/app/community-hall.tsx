@@ -13,6 +13,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { checkCommunityHall } from "@/src/services/api";
+import { useEffect } from "react";
+import { getSession, Session } from "@/src/services/session";
 
 import {
   COLORS,
@@ -33,6 +36,32 @@ export default function CommunityHall() {
 
   const [showCalendar, setShowCalendar] =
    useState(false);
+
+  const [session, setSession] =
+   useState<Session | null>(null);
+
+  useEffect(() => {
+
+  async function loadSession() {
+
+    const s = await getSession();
+
+    if (!s) {
+      router.replace("/");
+      return;
+    }
+
+    setSession(s);
+
+  }
+
+  loadSession();
+
+}, []);
+
+if (!session) {
+  return null;
+}
 
   return (
 
@@ -251,17 +280,29 @@ before payment.
 
 style={styles.button}
 
-onPress={()=>
+onPress={async () => {
 
-Alert.alert(
+    const res = await checkCommunityHall(
+        bookingDate.toISOString().split("T")[0]
+    );
 
-"Next",
+    if (!res.available) {
 
-"Backend availability check comes next."
+        Alert.alert(
+            "Already Booked",
+            res.message
+        );
 
-)
+        return;
 
-}
+    }
+
+    Alert.alert(
+        "Available",
+        "Proceeding to payment."
+    );
+
+}}
 
 >
 

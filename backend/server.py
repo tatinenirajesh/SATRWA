@@ -5160,17 +5160,48 @@ async def view_gate_pass(gate_pass_no:str):
 @api_router.post("/community-hall/check")
 async def check_community_hall(body: dict):
 
+    block = body["block"]
+    flat_no = body["flat_no"]
     booking_date = body["booking_date"]
 
-    existing = await db.community_hall_bookings.find_one({
+    # Check maintenance dues
+    flat = await db.flats.find_one({
+        "block": block,
+        "flat_no": flat_no
+    })
+
+    if flat and float(flat.get("maintenance_due", 0)) > 0:
+        return {
+            "available": False,
+            "reason": "DUE",
+            "message": "Outstanding maintenance dues must be cleared before booking any amenity."
+        }
+
+    # Check unpaid amenity invoices
+    unpaid = await db.amenity_invoices.find_one({
+        "block": block,
+        "flat_no": flat_no,
+        "status": "PENDING"
+    })
+
+    if unpaid:
+        return {
+            "available": False,
+            "reason": "AMENITY_DUE",
+            "message": "Please clear previous amenity invoices before making another booking."
+        }
+
+    # Check date availability
+    booking = await db.community_hall_bookings.find_one({
         "booking_date": booking_date,
         "booking_status": "BOOKED"
     })
 
-    if existing:
+    if booking:
         return {
             "available": False,
-            "message": "Community Hall is already booked for this date."
+            "reason": "BOOKED",
+            "message": "Community Hall is already booked on this date."
         }
 
     return {

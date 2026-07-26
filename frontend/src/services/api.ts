@@ -229,22 +229,24 @@ export async function gymStatus(
     );
 }
 
-export async function checkCommunityHall(date: string) {
+export async function checkCommunityHall(body: {
+    block: string;
+    flat_no: string;
+    booking_date: string;
+}) {
 
-  const r = await fetch(
-    `${API}/community-hall/check`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-      },
-      body: JSON.stringify({
-        booking_date: date,
-      }),
-    }
-  );
+    const r = await fetch(
+        `${API}/community-hall/check`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        }
+    );
 
-  return await r.json();
+    return await r.json();
 
 }
 
