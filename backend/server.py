@@ -5270,6 +5270,41 @@ async def debug_payments():
 
     return doc
 
+@api_router.post("/community-hall/book")
+async def book_community_hall(body: dict):
+
+    booking = {
+        "booking_id": body["booking_id"],
+        "block": body["block"],
+        "flat_no": body["flat_no"],
+        "owner_name": body["owner_name"],
+        "email": body["email"],
+        "phone": body.get("phone"),
+
+        "amenity": body["amenity"],
+        "booking_date": body["booking_date"],
+
+        "booking_amount": body["booking_amount"],
+
+        "payment_status": "PAID",
+        "booking_status": "BOOKED",
+
+        "receipt_no": body["receipt_no"],
+
+        "payment_id": body.get("payment_id", ""),
+
+        "invoice_status": "PENDING",
+
+        "created_on": datetime.utcnow()
+    }
+
+    await db.hall_bookings.insert_one(booking)
+
+    return {
+        "success": True,
+        "message": "Booking Successful"
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(

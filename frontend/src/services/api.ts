@@ -256,6 +256,23 @@ export async function checkCommunityHall(body: {
 
   return data;
 }
+
+export async function bookCommunityHall(body: any) {
+
+    const r = await fetch(
+        `${API}/api/community-hall/book`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        }
+    );
+
+    return await r.json();
+}
+
 export async function pendingPayments(){
 
     return request(

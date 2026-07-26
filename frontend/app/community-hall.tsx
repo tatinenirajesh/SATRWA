@@ -13,7 +13,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { checkCommunityHall } from "@/src/services/api";
+import {
+    checkCommunityHall,
+    bookCommunityHall
+} from "@/src/services/api";
 import { useEffect } from "react";
 import { getSession, Session } from "@/src/services/session";
 
@@ -39,6 +42,10 @@ export default function CommunityHall() {
 
   const [session, setSession] =
    useState<Session | null>(null);
+
+  const [available, setAvailable] = useState(false);
+
+  const [bookingCharge, setBookingCharge] = useState(10000);
 
   useEffect(() => {
 
@@ -310,9 +317,10 @@ if (!res.available) {
     return;
 }
 
-    Alert.alert(
-        "Available",
-        "Proceeding to payment."
+    setAvailable(true);
+
+    setBookingCharge(
+        hallType === "FUNCTION" ? 10000 : 5000
     );
 
 }}
@@ -324,6 +332,67 @@ if (!res.available) {
 Check Availability
 
 </Text>
+
+{available && (
+
+<View style={styles.card}>
+
+<Text style={styles.cardTitle}>
+Booking Charges
+</Text>
+
+<Text style={styles.price}>
+₹ {bookingCharge}
+</Text>
+
+<Pressable
+style={styles.button}
+onPress={async()=>{
+
+    // We'll replace this with Razorpay later
+
+    const result = await bookCommunityHall({
+
+        booking_id:"HB"+Date.now(),
+
+        block:session.block,
+
+        flat_no:session.flat_no,
+
+        owner_name:session.owner_name,
+
+        email:session.email,
+
+        phone:session.phone,
+
+        amenity:hallType,
+
+        booking_date:
+        bookingDate.toISOString().split("T")[0],
+
+        booking_amount:bookingCharge,
+
+        receipt_no:"TEMP"+Date.now()
+
+    });
+
+    Alert.alert(
+        "Success",
+        result.message
+    );
+
+}}
+>
+
+<Text style={styles.buttonText}>
+BOOK NOW
+</Text>
+
+</Pressable>
+
+</View>
+
+)}
 
 </Pressable>
 
