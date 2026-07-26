@@ -5225,6 +5225,10 @@ async def check_community_hall(body: dict):
         "available": True
     }
 
+@api_router.get("/debug/collections")
+async def debug_collections():
+    return await db.list_collection_names()
+
 app.include_router(api_router)
 
 app.add_middleware(

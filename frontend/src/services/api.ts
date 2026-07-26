@@ -230,26 +230,32 @@ export async function gymStatus(
 }
 
 export async function checkCommunityHall(body: {
-    block: string;
-    flat_no: string;
-    booking_date: string;
+  block: string;
+  flat_no: string;
+  booking_date: string;
 }) {
 
-    const r = await fetch(
-        `${API}/community-hall/check`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
-        }
-    );
+  console.log("CHECK BODY:", body);
 
-    return await r.json();
+  const r = await fetch(
+    `${API}/api/community-hall/check`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
 
+  console.log("STATUS:", r.status);
+
+  const data = await r.json();
+
+  console.log("RESPONSE:", data);
+
+  return data;
 }
-
 export async function pendingPayments(){
 
     return request(

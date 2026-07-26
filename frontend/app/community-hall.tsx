@@ -282,9 +282,11 @@ style={styles.button}
 
 onPress={async () => {
 
-    const res = await checkCommunityHall(
-        bookingDate.toISOString().split("T")[0]
-    );
+    const res = await checkCommunityHall({
+    block: session.block,
+    flat_no: session.flat_no,
+    booking_date: bookingDate.toISOString().split("T")[0],
+    });
 
     if (!res.available) {
 
