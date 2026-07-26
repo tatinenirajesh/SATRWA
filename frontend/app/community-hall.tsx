@@ -133,7 +133,7 @@ if (!session) {
           <View style={styles.textArea}>
 
             <Text style={styles.cardTitle}>
-              Function Hall
+              FUNCTION
             </Text>
 
             <Text style={styles.cardSub}>
@@ -166,7 +166,7 @@ if (!session) {
           <View style={styles.textArea}>
 
             <Text style={styles.cardTitle}>
-              Dining Hall
+              DINING
             </Text>
 
             <Text style={styles.cardSub}>
@@ -347,42 +347,64 @@ Booking Charges
 
 <Pressable
 style={styles.button}
-onPress={async()=>{
-
-    // We'll replace this with Razorpay later
+onPress={async () => {
 
     const result = await bookCommunityHall({
 
-        booking_id:"HB"+Date.now(),
-
-        block:session.block,
-
-        flat_no:session.flat_no,
-
-        owner_name:session.owner_name,
-
-        email:session.email,
-
-        phone:session.phone,
-
-        amenity:hallType,
+        email: session.email,
 
         booking_date:
-        bookingDate.toISOString().split("T")[0],
+            bookingDate
+                .toISOString()
+                .split("T")[0],
 
-        booking_amount:bookingCharge,
+        session: "FULL",
 
-        receipt_no:"TEMP"+Date.now()
+        function_hall:
+            hallType === "FUNCTION",
+
+        dining_hall:
+            hallType === "DINING",
 
     });
 
-    Alert.alert(
-        "Success",
-        result.message
-    );
+    if (!result.success) {
+
+        Alert.alert(
+            "Booking",
+            result.message
+        );
+
+        return;
+
+    }
+
+    router.push({
+
+        pathname: "/payment/community-hall",
+
+        params: {
+
+            payment_id:
+                result.payment.payment_id,
+
+            amount:
+                result.amount.toString(),
+
+            booking_date:
+                result.booking_date,
+
+            function_hall:
+                String(result.FUNCTION),
+
+            dining_hall:
+                String(result.DINING),
+
+        },
+
+    });
 
 }}
->
 
 <Text style={styles.buttonText}>
 BOOK NOW

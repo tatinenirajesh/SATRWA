@@ -74,7 +74,7 @@ gym_bookings = db.gym_bookings
 pool_memberships = db.pool_memberships
 pool_bookings = db.pool_bookings
 guest_room_bookings = db.guest_room_bookings
-community_hall_bookings = db.community_hall_bookings
+community_hall_bookings = db.hall_bookings
 
 gym_memberships = db.gym_memberships
 gym_bookings = db.gym_bookings
@@ -88,8 +88,8 @@ guest_room_bookings = db.guest_room_bookings
 guest_room_bookings = db.guest_room_bookings
 hall_bookings = db.hall_bookings
 hall_invoices = db.hall_invoices
-community_hall_bookings = db.community_hall_bookings
-community_hall_invoices = db.community_hall_invoices
+community_hall_bookings = db.hall_bookings
+community_hall_invoices = db.amenity_invoices
 hall_booking_credits = db.hall_booking_credits
 payments = db.payments
 receipt_books = db.receipt_books
@@ -331,10 +331,6 @@ class CommunityHallBookingRequest(BaseModel):
         "MORNING",
         "EVENING",
     ]
-
-    upi_id: str
-
-    upi_ref_no: str
 
 class VerifyCentralPayment(BaseModel):
 
@@ -3495,7 +3491,7 @@ async def community_hall_book(
     if dues["total_due"] > 0:
         raise HTTPException(
             400,
-            "Maintenance dues must be cleared."
+            "Maintenance dues must be cleared before booking."
         )
 
     existing = await hall_booking_exists(
@@ -3516,60 +3512,30 @@ async def community_hall_book(
     if body.dining_hall:
         amount += DINING_HALL_RATE
 
-    booking_id = str(uuid.uuid4())
-
-    await community_hall_bookings.insert_one(
-        {
-
-            "booking_id": booking_id,
-
-            "email": body.email.lower(),
-
-            "block": account["block"],
-
-            "flat_no": account["flat_no"],
-
-            "booking_date": body.booking_date,
-
-            "session": body.session,
-
-            "function_hall": body.function_hall,
-
-            "dining_hall": body.dining_hall,
-
-            "hall_amount": amount,
-
-            "status": BOOKING_CONFIRMED,
-
-            "upi_id": body.upi_id,
-
-            "upi_ref_no": body.upi_ref_no,
-
-            "created_at":
-                datetime.now(
-                    timezone.utc
-                ).isoformat(),
-            "timeline": [
-    {
-        "status": "SUBMITTED",
-        "at": now_iso,
-        "by": "RESIDENT"
-    }
-],
-        }
+    payment = await create_payment(
+        db=db,
+        module="COMMUNITY_HALL",
+        entity_type="RESIDENT",
+        entity_id=f"{account['block']}-{account['flat_no']}",
+        payer_name=account["owner_name"],
+        block=account["block"],
+        flat_no=account["flat_no"],
+        amount=amount,
+        payment_mode="ICICI",
+        receipt_book="CLUBHOUSE",
     )
 
     return {
-
         "success": True,
-
-        "booking_id": booking_id,
-
         "amount": amount,
-
-        "status": BOOKING_CONFIRMED,
+        "payment": payment,
+        "booking_date": body.booking_date,
+        "function_hall": body.function_hall,
+        "dining_hall": body.dining_hall,
+        "session": body.session,
+        "payment_required": True,
+        "message": "Proceed to payment."
     }
-
 @api_router.get("/maintenance/summary")
 async def maintenance_summary(
     email: str,
@@ -3933,7 +3899,7 @@ async def pending_payments():
         ("manual", db.manual_payments),
         ("amenity", db.amenity_bookings),
         ("guest_room", db.guest_room_bookings),
-        ("community_hall", db.community_hall_bookings),
+        ("community_hall", db.hall_bookings),
 
     ]
 
@@ -3972,7 +3938,7 @@ async def approve_payment(body: PaymentApproval):
         "manual": db.manual_payments,
         "amenity": db.amenity_bookings,
         "guest_room": db.guest_room_bookings,
-        "community_hall": db.community_hall_bookings,
+        "community_hall": db.hall_bookings,
     }
 
     collection = collections.get(body.payment_type)
@@ -4055,7 +4021,7 @@ async def reject_payment(body: PaymentReject):
         "manual": db.manual_payments,
         "amenity": db.amenity_bookings,
         "guest_room": db.guest_room_bookings,
-        "community_hall": db.community_hall_bookings,
+        "community_hall": db.hall_bookings,
     }
 
     collection = collections.get(body.payment_type)
@@ -4124,7 +4090,7 @@ async def payment_status(email: str):
         ("manual", db.manual_payments),
         ("amenity", db.amenity_bookings),
         ("guest_room", db.guest_room_bookings),
-        ("community_hall", db.community_hall_bookings),
+        ("community_hall", db.hall_bookings),
 
     ]
 
@@ -4429,7 +4395,7 @@ async def clubhouse_book():
         }
     ).to_list(5000)
 
-    hall = await db.community_hall_bookings.find(
+    hall = await db.hall_bookings.find(
         {
             "verified": True
         },
@@ -4513,7 +4479,7 @@ async def receipt_search(receipt_no: str):
 
         db.guest_room_bookings,
 
-        db.community_hall_bookings,
+        db.hall_bookings,
 
     ]
 
@@ -4567,7 +4533,7 @@ async def search_payments(q: str):
 
         ("guest_room", db.guest_room_bookings),
 
-        ("community_hall", db.community_hall_bookings),
+        ("community_hall", db.hall_bookings),
 
     ]
 
@@ -4649,7 +4615,7 @@ async def admin_reprint(receipt_no: str):
 
         db.amenity_bookings,
 
-        db.community_hall_bookings,
+        db.hall_bookings,
 
         db.guest_room_bookings,
 
@@ -5239,7 +5205,7 @@ async def view_gate_pass(gate_pass_no:str):
 
     return gp
 
-@api_router.post("/community-hall/check")
+@api_router.post("/community-hall/payment-success")
 async def check_community_hall(body: dict):
 
     print("========== COMMUNITY HALL CHECK ==========")
@@ -5301,7 +5267,7 @@ async def check_community_hall(body: dict):
             "message": "Please clear previous amenity invoices before making another booking."
         }
 
-    booking = await db.community_hall_bookings.find_one({
+    booking = await db.hall_bookings.find_one({
         "booking_date": booking_date,
         "booking_status": "BOOKED"
     })
@@ -5351,41 +5317,6 @@ async def debug_payments():
     )
 
     return doc
-
-@api_router.post("/community-hall/book")
-async def book_community_hall(body: dict):
-
-    booking = {
-        "booking_id": body["booking_id"],
-        "block": body["block"],
-        "flat_no": body["flat_no"],
-        "owner_name": body["owner_name"],
-        "email": body["email"],
-        "phone": body.get("phone"),
-
-        "amenity": body["amenity"],
-        "booking_date": body["booking_date"],
-
-        "booking_amount": body["booking_amount"],
-
-        "payment_status": "PAID",
-        "booking_status": "BOOKED",
-
-        "receipt_no": body["receipt_no"],
-
-        "payment_id": body.get("payment_id", ""),
-
-        "invoice_status": "PENDING",
-
-        "created_on": datetime.utcnow()
-    }
-
-    await db.hall_bookings.insert_one(booking)
-
-    return {
-        "success": True,
-        "message": "Booking Successful"
-    }
 
 app.include_router(api_router)
 
