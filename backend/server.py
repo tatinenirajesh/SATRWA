@@ -5244,6 +5244,21 @@ async def debug_flat():
 
     return flat
 
+@api_router.get("/debug/maintenance")
+async def debug_maintenance():
+
+    doc = await db.maintenance_payments.find_one(
+        {
+            "block": "B",
+            "flat_no": "506"
+        },
+        {
+            "_id": 0
+        }
+    )
+
+    return doc
+
 app.include_router(api_router)
 
 app.add_middleware(
