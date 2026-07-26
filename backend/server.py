@@ -3586,16 +3586,30 @@ async def maintenance_summary(
     flat = await get_flat(
         account["block"],
         account["flat_no"],
-    )
+)
 
-    dues = await compute_dues(flat)
+    balance = await get_outstanding(flat)
 
     return {
+
         "owner_name": account.get("owner_name"),
+
         "block": account["block"],
+
         "flat_no": account["flat_no"],
-        **dues,
-    }
+
+        "outstanding_balance": balance["outstanding"],
+
+        "monthly_charge": balance["monthly_charge"],
+
+        "credit_balance": balance["credit"],
+
+        "total_due": max(
+            0,
+            balance["outstanding"] - balance["credit"]
+        )
+
+}
 
 @api_router.get("/maintenance/history")
 async def maintenance_history(
@@ -5254,7 +5268,7 @@ async def check_community_hall(body: dict):
 
     balance = await get_outstanding(flat)
 
-    print("TOTAL DUE :", dues["total_due"])
+    print("OUTSTANDING BALANCE:", outstanding)
 
     if balance["outstanding"] > 0:
           return {

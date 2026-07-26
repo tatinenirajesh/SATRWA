@@ -132,13 +132,13 @@ setSummary(res.data);
 
         <View style={styles.card}>
 
-          <Text style={styles.label}>
-            Current Due
-          </Text>
+        <Text style={styles.label}>
+            Outstanding Balance
+        </Text>
 
-          <Text style={styles.amount}>
-            ₹ {summary?.total_due ?? 0}
-          </Text>
+        <Text style={styles.amount}>
+            ₹ {summary?.outstanding_balance ?? 0}
+        </Text>
 
         </View>
 
