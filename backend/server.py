@@ -5225,14 +5225,10 @@ async def check_community_hall(body: dict):
         "available": True
     }
 
-@api_router.get("/debug/collections")
-async def debug_collections():
-    return await db.list_collection_names()
+@api_router.get("/debug/payment-ledger")
+async def debug_payment_ledger():
 
-@api_router.get("/debug/flat")
-async def debug_flat():
-
-    flat = await db.flats.find_one(
+    doc = await db.payment_ledger.find_one(
         {
             "block": "B",
             "flat_no": "506"
@@ -5242,12 +5238,12 @@ async def debug_flat():
         }
     )
 
-    return flat
+    return doc
 
-@api_router.get("/debug/maintenance")
-async def debug_maintenance():
+@api_router.get("/debug/payments")
+async def debug_payments():
 
-    doc = await db.maintenance_payments.find_one(
+    doc = await db.payments.find_one(
         {
             "block": "B",
             "flat_no": "506"
