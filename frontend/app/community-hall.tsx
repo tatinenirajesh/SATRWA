@@ -328,10 +328,10 @@ if (!res.available) {
 >
 
 <Text style={styles.buttonText}>
-
-Check Availability
-
+    Check Availability
 </Text>
+
+</Pressable>
 
 {available && (
 
@@ -395,28 +395,24 @@ onPress={async () => {
                 result.booking_date,
 
             function_hall:
-                String(result.FUNCTION),
+                String(result.function_hall),
 
             dining_hall:
-                String(result.DINING),
+                String(result.dining_hall),
 
         },
 
     });
-
-}}
-
-<Text style={styles.buttonText}>
-BOOK NOW
-</Text>
+  }}>
+    <Text style={styles.buttonText}>
+        BOOK NOW
+    </Text>
 
 </Pressable>
 
 </View>
 
 )}
-
-</Pressable>
 
         </Pressable>
 
