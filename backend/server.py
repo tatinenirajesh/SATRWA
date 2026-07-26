@@ -723,34 +723,32 @@ async def get_account(email: str):
 async def pending_registration(email: str):
     return None
 
-async def get_monthly_rate(flat: dict):
+async def get_monthly_rate(flat):
 
-    settings = await db.settings.find_one(
-        {"id": "maintenance_settings"},
-        {"_id": 0},
-    )
-
-    if not settings:
-        raise HTTPException(
-            500,
-            "Maintenance settings not configured."
-        )
-
-    if flat.get("maintenance_override"):
-        return flat["maintenance_override"]
-
-    bhk = flat.get("bhk_type")
+    bhk = flat["bhk_type"]
 
     if bhk == "2BHK":
-        return settings["rate_2bhk"]
 
-    if bhk == "3BHK":
-        return settings["rate_3bhk"]
+        setting = await db.admin_settings.find_one(
+            {"key":"maintenance_2bhk"},
+            {"_id":0}
+        )
 
-    if bhk == "DUPLEX":
-        return settings["rate_duplex"]
+    elif bhk == "3BHK":
 
-    return 0
+        setting = await db.admin_settings.find_one(
+            {"key":"maintenance_3bhk"},
+            {"_id":0}
+        )
+
+    else:
+
+        setting = await db.admin_settings.find_one(
+            {"key":"maintenance_duplex"},
+            {"_id":0}
+        )
+
+    return setting["value"]
 
 async def get_outstanding(flat: dict):
 
