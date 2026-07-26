@@ -5162,7 +5162,7 @@ async def view_gate_pass(gate_pass_no:str):
 @api_router.post("/community-hall/check")
 async def check_community_hall(body: dict):
 
-    print("========== COMMUNITY HALL CHECK ==========")
+    print("========== COMMUNITY HALL CHECK =========="`)
     print(body)
 
     block = body["block"]
@@ -5173,15 +5173,29 @@ async def check_community_hall(body: dict):
     print("FLAT  :", flat_no)
     print("DATE  :", booking_date)
 
-    flat = await db.flats.find_one({
-        "block": block,
-        "flat_no": flat_no
-    })
+    # Get resident account
+    account = await accounts.find_one(
+        {
+            "block": block,
+            "flat_no": flat_no,
+        }
+    )
 
-    print("FLAT DOC :", flat)
+    if not account:
+        return {
+            "available": False,
+            "reason": "ACCOUNT_NOT_FOUND",
+            "message": "Resident account not found."
+        }
 
-    if flat and float(flat.get("maintenance_due", 0)) > 0:
-        print("FAILED : Maintenance Due")
+    # Use the same maintenance calculation as "My Dues"
+    flat = await get_flat(block, flat_no)
+
+    dues = await compute_dues(flat)
+
+    print("TOTAL DUE :", dues["total_due"])
+
+    if dues["total_due"] > 0:
         return {
             "available": False,
             "reason": "DUE",
