@@ -723,6 +723,67 @@ async def get_account(email: str):
 async def pending_registration(email: str):
     return None
 
+async def get_monthly_rate(flat: dict):
+
+    settings = await db.settings.find_one(
+        {"id": "maintenance_settings"},
+        {"_id": 0},
+    )
+
+    if not settings:
+        raise HTTPException(
+            500,
+            "Maintenance settings not configured."
+        )
+
+    if flat.get("maintenance_override"):
+        return flat["maintenance_override"]
+
+    bhk = flat.get("bhk_type")
+
+    if bhk == "2BHK":
+        return settings["rate_2bhk"]
+
+    if bhk == "3BHK":
+        return settings["rate_3bhk"]
+
+    if bhk == "DUPLEX":
+        return settings["rate_duplex"]
+
+    return 0
+
+async def get_outstanding(flat: dict):
+
+    if not flat:
+        return {
+            "outstanding": 0,
+            "credit": 0,
+            "monthly_charge": 0,
+            "eligible": True,
+        }
+
+    monthly_charge = await get_monthly_rate(flat)
+
+    outstanding = float(
+        flat.get("outstanding_balance", 0)
+    )
+
+    credit = float(
+        flat.get("credit_balance", 0)
+    )
+
+    return {
+
+        "monthly_charge": monthly_charge,
+
+        "outstanding": outstanding,
+
+        "credit": credit,
+
+        "eligible": outstanding <= 0,
+
+    }
+
 async def compute_dues(flat: dict) -> dict:
 
     if not flat:
@@ -5191,17 +5252,17 @@ async def check_community_hall(body: dict):
     # Use the same maintenance calculation as "My Dues"
     flat = await get_flat(block, flat_no)
 
-    dues = await compute_dues(flat)
+    balance = await get_outstanding(flat)
 
     print("TOTAL DUE :", dues["total_due"])
 
-    if dues["total_due"] > 0:
-        return {
+    if balance["outstanding"] > 0:
+          return {
             "available": False,
             "reason": "DUE",
-            "message": "Outstanding maintenance dues must be cleared before booking any amenity.",
+            "message": f"You have an outstanding balance of ₹{balance['outstanding']:.2f}. Please clear your dues before booking any amenity.",
             "redirect": "/maintenance"
-        }
+            }
 
     unpaid = await db.amenity_invoices.find_one({
         "block": block,
