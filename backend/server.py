@@ -5157,52 +5157,67 @@ async def view_gate_pass(gate_pass_no:str):
 
     return gp
 
-@api_router.post("/community-hall/check")
+@@api_router.post("/community-hall/check")
 async def check_community_hall(body: dict):
+
+    print("========== COMMUNITY HALL CHECK ==========")
+    print(body)
 
     block = body["block"]
     flat_no = body["flat_no"]
     booking_date = body["booking_date"]
 
-    # Check maintenance dues
+    print("BLOCK :", block)
+    print("FLAT  :", flat_no)
+    print("DATE  :", booking_date)
+
     flat = await db.flats.find_one({
         "block": block,
         "flat_no": flat_no
     })
 
+    print("FLAT DOC :", flat)
+
     if flat and float(flat.get("maintenance_due", 0)) > 0:
+        print("FAILED : Maintenance Due")
         return {
             "available": False,
             "reason": "DUE",
             "message": "Outstanding maintenance dues must be cleared before booking any amenity."
         }
 
-    # Check unpaid amenity invoices
     unpaid = await db.amenity_invoices.find_one({
         "block": block,
         "flat_no": flat_no,
         "status": "PENDING"
     })
 
+    print("UNPAID :", unpaid)
+
     if unpaid:
+        print("FAILED : Pending Amenity Invoice")
         return {
             "available": False,
             "reason": "AMENITY_DUE",
             "message": "Please clear previous amenity invoices before making another booking."
         }
 
-    # Check date availability
     booking = await db.community_hall_bookings.find_one({
         "booking_date": booking_date,
         "booking_status": "BOOKED"
     })
 
+    print("BOOKING :", booking)
+
     if booking:
+        print("FAILED : Already Booked")
         return {
             "available": False,
             "reason": "BOOKED",
             "message": "Community Hall is already booked on this date."
         }
+
+    print("SUCCESS : Available")
 
     return {
         "available": True
