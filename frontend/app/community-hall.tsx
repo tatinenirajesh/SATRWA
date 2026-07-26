@@ -25,7 +25,13 @@ export default function CommunityHall() {
   const router = useRouter();
 
   const [hallType, setHallType] =
-    useState<"FUNCTION" | "DINING">("FUNCTION");
+   useState<"FUNCTION" | "DINING">("FUNCTION");
+
+  const [bookingDate, setBookingDate] =
+   useState(new Date());
+
+  const [showCalendar, setShowCalendar] =
+   useState(false);
 
   return (
 
@@ -167,9 +173,104 @@ export default function CommunityHall() {
           }
         >
 
-          <Text style={styles.buttonText}>
-            Continue
-          </Text>
+         <Text style={styles.sectionTitle}>
+  Booking Date
+</Text>
+
+<Pressable
+  style={styles.dateCard}
+  onPress={() => setShowCalendar(true)}
+>
+
+  <Ionicons
+    name="calendar-outline"
+    size={26}
+    color={COLORS.brand}
+  />
+
+  <Text style={styles.dateText}>
+    {bookingDate.toDateString()}
+  </Text>
+
+</Pressable>
+
+{showCalendar && (
+
+<DateTimePicker
+
+value={bookingDate}
+
+mode="date"
+
+minimumDate={new Date()}
+
+display="default"
+
+onChange={(event, selectedDate)=>{
+
+setShowCalendar(false);
+
+if(selectedDate){
+
+setBookingDate(selectedDate);
+
+}
+
+}}
+
+/>
+
+)}
+
+<View style={styles.notice}>
+
+<Ionicons
+
+name="information-circle-outline"
+
+size={22}
+
+color={COLORS.brand}
+
+/>
+
+<Text style={styles.noticeText}>
+
+Only one booking is allowed
+for each day.
+
+Availability will be verified
+before payment.
+
+</Text>
+
+</View>
+
+<Pressable
+
+style={styles.button}
+
+onPress={()=>
+
+Alert.alert(
+
+"Next",
+
+"Backend availability check comes next."
+
+)
+
+}
+
+>
+
+<Text style={styles.buttonText}>
+
+Check Availability
+
+</Text>
+
+</Pressable>
 
         </Pressable>
 
@@ -292,6 +393,22 @@ buttonText:{
 fontSize:17,
 fontWeight:"700",
 color:"#000",
+},
+
+dateCard:{
+flexDirection:"row",
+alignItems:"center",
+backgroundColor:COLORS.surfaceSecondary,
+padding:18,
+borderRadius:RADIUS.md,
+marginBottom:22,
+},
+
+dateText:{
+marginLeft:15,
+fontSize:17,
+color:COLORS.onSurface,
+fontFamily:FONTS.sans,
 },
 
 });
