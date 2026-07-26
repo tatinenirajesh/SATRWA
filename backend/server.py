@@ -5157,6 +5157,26 @@ async def view_gate_pass(gate_pass_no:str):
 
     return gp
 
+@api_router.post("/community-hall/check")
+async def check_community_hall(body: dict):
+
+    booking_date = body["booking_date"]
+
+    existing = await db.community_hall_bookings.find_one({
+        "booking_date": booking_date,
+        "booking_status": "BOOKED"
+    })
+
+    if existing:
+        return {
+            "available": False,
+            "message": "Community Hall is already booked for this date."
+        }
+
+    return {
+        "available": True
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(

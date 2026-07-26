@@ -229,6 +229,25 @@ export async function gymStatus(
     );
 }
 
+export async function checkCommunityHall(date: string) {
+
+  const r = await fetch(
+    `${API}/community-hall/check`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+      },
+      body: JSON.stringify({
+        booking_date: date,
+      }),
+    }
+  );
+
+  return await r.json();
+
+}
+
 export async function pendingPayments(){
 
     return request(
