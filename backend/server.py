@@ -5157,7 +5157,7 @@ async def view_gate_pass(gate_pass_no:str):
 
     return gp
 
-@@api_router.post("/community-hall/check")
+@api_router.post("/community-hall/check")
 async def check_community_hall(body: dict):
 
     print("========== COMMUNITY HALL CHECK ==========")
