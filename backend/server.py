@@ -328,8 +328,7 @@ class CommunityHallBookingRequest(BaseModel):
     dining_hall: bool
 
     session: Literal[
-        "MORNING",
-        "EVENING",
+        "FULL DAY",
     ]
 
 class VerifyCentralPayment(BaseModel):
@@ -3457,54 +3456,6 @@ async def community_hall_availability(
 
     }
 
-@api_router.post("/community-hall/check")
-async def check_community_hall(body: dict):
-
-    block = body["block"]
-    flat_no = body["flat_no"]
-    booking_date = body["booking_date"]
-
-    account = await accounts.find_one(
-        {
-            "block": block,
-            "flat_no": flat_no,
-        },
-        {"_id": 0},
-    )
-
-    if not account:
-        return {
-            "available": False,
-            "message": "Resident account not found."
-        }
-
-    flat = await get_flat(block, flat_no)
-
-    dues = await compute_dues(flat)
-
-    if dues["total_due"] > 0:
-        return {
-            "available": False,
-            "reason": "DUE",
-            "message": "Outstanding maintenance dues must be cleared before booking any amenity.",
-            "redirect": "/maintenance"
-        }
-
-    booking = await hall_booking_exists(
-        booking_date,
-    )
-
-    if booking:
-        return {
-            "available": False,
-            "reason": "BOOKED",
-            "message": "Community Hall is already booked for the selected date."
-        }
-
-    return {
-        "available": True
-    }
-
 @api_router.post("/community-hall/book")
 async def community_hall_book(
     body: CommunityHallBookingRequest,
@@ -5254,7 +5205,7 @@ async def view_gate_pass(gate_pass_no:str):
     return gp
 
 @api_router.post("/community-hall/payment-success")
-async def check_community_hall(body: dict):
+async def community_hall_payment_success(body: dict):
 
     print("========== COMMUNITY HALL CHECK ==========")
     print(body)

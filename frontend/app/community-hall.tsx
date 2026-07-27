@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,13 +11,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import {
-    checkCommunityHall,
-    bookCommunityHall
-} from "@/src/services/api";
-import { useEffect } from "react";
+import { useRouter } from "expo-router";
+
+import { bookCommunityHall } from "@/src/services/api";
 import { getSession, Session } from "@/src/services/session";
 
 import {
@@ -31,51 +28,52 @@ export default function CommunityHall() {
 
   const router = useRouter();
 
+  const [session, setSession] =
+    useState<Session | null>(null);
+
   const [hallType, setHallType] =
-   useState<"FUNCTION" | "DINING">("FUNCTION");
+    useState<"FUNCTION" | "DINING">("FUNCTION");
 
   const [bookingDate, setBookingDate] =
-   useState(new Date());
+    useState(new Date());
 
   const [showCalendar, setShowCalendar] =
-   useState(false);
-
-  const [session, setSession] =
-   useState<Session | null>(null);
-
-  const [available, setAvailable] = useState(false);
-
-  const [bookingCharge, setBookingCharge] = useState(10000);
+    useState(false);
 
   useEffect(() => {
 
-  async function loadSession() {
+    async function loadSession() {
 
-    const s = await getSession();
+      const s = await getSession();
 
-    if (!s) {
-      router.replace("/");
-      return;
+      if (!s) {
+
+        router.replace("/");
+
+        return;
+
+      }
+
+      setSession(s);
+
     }
 
-    setSession(s);
+    loadSession();
+
+  }, []);
+
+  if (!session) {
+
+    return null;
 
   }
-
-  loadSession();
-
-}, []);
-
-if (!session) {
-  return null;
-}
 
   return (
 
     <View style={styles.container}>
 
       <LinearGradient
-        colors={["#1A1508","#0A0A0A"]}
+        colors={["#1A1508", "#0A0A0A"]}
         style={styles.header}
       >
 
@@ -100,7 +98,7 @@ if (!session) {
               Community Hall
             </Text>
 
-            <View style={{width:40}} />
+            <View style={{ width: 40 }} />
 
           </View>
 
@@ -119,30 +117,34 @@ if (!session) {
         <Pressable
           style={[
             styles.card,
-            hallType==="FUNCTION" && styles.selected
+            hallType === "FUNCTION" &&
+              styles.selected,
           ]}
-          onPress={() => setHallType("FUNCTION")}
+          onPress={() =>
+            setHallType("FUNCTION")
+          }
         >
 
           <Ionicons
             name="business-outline"
-            size={36}
+            size={34}
             color={COLORS.brand}
           />
 
           <View style={styles.textArea}>
 
             <Text style={styles.cardTitle}>
-              FUNCTION
+              Function Hall
             </Text>
 
             <Text style={styles.cardSub}>
-              Ideal for weddings, receptions,
-              birthdays and large gatherings.
+              Weddings, receptions,
+              birthdays and other
+              large gatherings.
             </Text>
 
             <Text style={styles.price}>
-              ₹10,000 Booking Charge
+              ₹10,000
             </Text>
 
           </View>
@@ -152,35 +154,88 @@ if (!session) {
         <Pressable
           style={[
             styles.card,
-            hallType==="DINING" && styles.selected
+            hallType === "DINING" &&
+              styles.selected,
           ]}
-          onPress={() => setHallType("DINING")}
+          onPress={() =>
+            setHallType("DINING")
+          }
         >
 
           <Ionicons
             name="restaurant-outline"
-            size={36}
+            size={34}
             color={COLORS.brand}
           />
 
           <View style={styles.textArea}>
 
             <Text style={styles.cardTitle}>
-              DINING
+              Dining Hall
             </Text>
 
             <Text style={styles.cardSub}>
-              Suitable for dining,
-              meetings and small events.
+              Dining,
+              meetings and
+              small gatherings.
             </Text>
 
             <Text style={styles.price}>
-              ₹5,000 Booking Charge
+              ₹5,000
             </Text>
 
           </View>
 
         </Pressable>
+
+                <Text style={styles.sectionTitle}>
+          Booking Date
+        </Text>
+
+        <Pressable
+          style={styles.dateCard}
+          onPress={() => setShowCalendar(true)}
+        >
+
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={COLORS.brand}
+          />
+
+          <Text style={styles.dateText}>
+            {bookingDate.toDateString()}
+          </Text>
+
+        </Pressable>
+
+        {showCalendar && (
+
+          <DateTimePicker
+
+            value={bookingDate}
+
+            mode="date"
+
+            minimumDate={new Date()}
+
+            display="default"
+
+            onChange={(event, selectedDate) => {
+
+              setShowCalendar(false);
+
+              if (selectedDate) {
+
+                setBookingDate(selectedDate);
+
+              }
+
+            }}
+
+          />
+
+        )}
 
         <View style={styles.notice}>
 
@@ -192,227 +247,128 @@ if (!session) {
 
           <Text style={styles.noticeText}>
 
-            Only one booking is allowed
-            per date. Availability will be
-            checked before payment.
+            • Only one booking is allowed for each date.
+
+            {"\n\n"}
+
+            • Maintenance dues must be cleared before booking.
+
+            {"\n\n"}
+
+            • Booking is confirmed only after successful payment.
+
+            {"\n\n"}
+
+            • Cancellation is allowed only up to 24 hours before the event.
 
           </Text>
 
         </View>
 
         <Pressable
+
           style={styles.button}
-          onPress={() =>
-            Alert.alert(
-              "Next Step",
-              "Calendar screen will open next."
-            )
-          }
+
+          onPress={async () => {
+
+            try {
+
+              const result = await bookCommunityHall({
+
+                email: session.email,
+
+                booking_date:
+                  bookingDate
+                    .toISOString()
+                    .split("T")[0],
+
+                session: "FULL DAY",
+
+                function_hall:
+                  hallType === "FUNCTION",
+
+                dining_hall:
+                  hallType === "DINING",
+
+              });
+
+              if (!result.success) {
+
+                let message = "Unable to process booking.";
+
+              if (typeof result?.detail === "string") {
+
+                  message = result.detail;
+
+              } else if (Array.isArray(result?.detail)) {
+
+                  message = result.detail
+                      .map((x: any) => x.msg)
+                      .join("\n");
+
+              console.log("BOOK RESULT");
+              console.log(JSON.stringify(result, null, 2));
+
+              } else if (typeof result?.message === "string") {
+
+                  message = result.message;
+
+              }
+
+              Alert.alert("Booking", message);
+
+                return;
+
+              }
+
+              router.push({
+
+                pathname:
+                  "/payment/community-hall",
+
+                params: {
+
+                  payment_id:
+                    result.payment.payment_id,
+
+                  amount:
+                    String(result.amount),
+
+                  booking_date:
+                    result.booking_date,
+
+                  function_hall:
+                    String(result.function_hall),
+
+                  dining_hall:
+                    String(result.dining_hall),
+
+                },
+
+              });
+
+            } catch (e: any) {
+
+              Alert.alert(
+
+                "Booking",
+
+                e?.message ??
+                "Unable to contact server."
+
+              );
+
+            }
+
+          }}
+
         >
 
-         <Text style={styles.sectionTitle}>
-  Booking Date
-</Text>
+          <Text style={styles.buttonText}>
 
-<Pressable
-  style={styles.dateCard}
-  onPress={() => setShowCalendar(true)}
->
+            BOOK NOW
 
-  <Ionicons
-    name="calendar-outline"
-    size={26}
-    color={COLORS.brand}
-  />
-
-  <Text style={styles.dateText}>
-    {bookingDate.toDateString()}
-  </Text>
-
-</Pressable>
-
-{showCalendar && (
-
-<DateTimePicker
-
-value={bookingDate}
-
-mode="date"
-
-minimumDate={new Date()}
-
-display="default"
-
-onChange={(event, selectedDate)=>{
-
-setShowCalendar(false);
-
-if(selectedDate){
-
-setBookingDate(selectedDate);
-
-}
-
-}}
-
-/>
-
-)}
-
-<View style={styles.notice}>
-
-<Ionicons
-
-name="information-circle-outline"
-
-size={22}
-
-color={COLORS.brand}
-
-/>
-
-<Text style={styles.noticeText}>
-
-Only one booking is allowed
-for each day.
-
-Availability will be verified
-before payment.
-
-</Text>
-
-</View>
-
-<Pressable
-
-style={styles.button}
-
-onPress={async () => {
-
-    const res = await checkCommunityHall({
-    block: session.block,
-    flat_no: session.flat_no,
-    booking_date: bookingDate.toISOString().split("T")[0],
-    });
-
-if (!res.available) {
-
-    Alert.alert(
-        "Booking Not Allowed",
-        res.message,
-        [
-            {
-                text: "Cancel",
-                style: "cancel",
-            },
-            {
-                text: "Pay Now",
-                onPress: () => {
-                    router.push(res.redirect || "/maintenance");
-                },
-            },
-        ]
-    );
-
-    return;
-}
-
-    setAvailable(true);
-
-    setBookingCharge(
-        hallType === "FUNCTION" ? 10000 : 5000
-    );
-
-}}
-
->
-
-<Text style={styles.buttonText}>
-    Check Availability
-</Text>
-
-</Pressable>
-
-{available && (
-
-<View style={styles.card}>
-
-<Text style={styles.cardTitle}>
-Booking Charges
-</Text>
-
-<Text style={styles.price}>
-₹ {bookingCharge}
-</Text>
-
-<Pressable
-style={styles.button}
-onPress={async () => {
-
-    const result = await bookCommunityHall({
-
-        email: session.email,
-
-        booking_date:
-            bookingDate
-                .toISOString()
-                .split("T")[0],
-
-        session: "FULL",
-
-        function_hall:
-            hallType === "FUNCTION",
-
-        dining_hall:
-            hallType === "DINING",
-
-    });
-
-    if (!result.success) {
-
-        Alert.alert(
-            "Booking",
-            result.message
-        );
-
-        return;
-
-    }
-
-    router.push({
-
-        pathname: "/payment/community-hall",
-
-        params: {
-
-            payment_id:
-                result.payment.payment_id,
-
-            amount:
-                result.amount.toString(),
-
-            booking_date:
-                result.booking_date,
-
-            function_hall:
-                String(result.function_hall),
-
-            dining_hall:
-                String(result.dining_hall),
-
-        },
-
-    });
-  }}>
-    <Text style={styles.buttonText}>
-        BOOK NOW
-    </Text>
-
-</Pressable>
-
-</View>
-
-)}
+          </Text>
 
         </Pressable>
 
@@ -426,131 +382,138 @@ onPress={async () => {
 
 const styles = StyleSheet.create({
 
-container:{
-flex:1,
-backgroundColor:COLORS.surface,
-},
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+  },
 
-header:{
-paddingBottom:SPACING.lg,
-},
+  header: {
+    paddingBottom: SPACING.lg,
+  },
 
-headerRow:{
-flexDirection:"row",
-alignItems:"center",
-justifyContent:"space-between",
-paddingHorizontal:SPACING.lg,
-paddingTop:SPACING.sm,
-},
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+  },
 
-backButton:{
-width:40,
-height:40,
-borderRadius:20,
-justifyContent:"center",
-alignItems:"center",
-backgroundColor:COLORS.surfaceSecondary,
-},
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceSecondary,
+  },
 
-headerTitle:{
-fontSize:24,
-fontFamily:FONTS.serif,
-color:COLORS.onSurface,
-},
+  headerTitle: {
+    fontSize: 24,
+    fontFamily: FONTS.serif,
+    color: COLORS.onSurface,
+  },
 
-body:{
-padding:SPACING.xl,
-},
+  body: {
+    padding: SPACING.xl,
+    paddingBottom: 60,
+  },
 
-sectionTitle:{
-fontSize:22,
-fontFamily:FONTS.serif,
-color:COLORS.onSurface,
-marginBottom:20,
-},
+  sectionTitle: {
+    fontSize: 22,
+    fontFamily: FONTS.serif,
+    color: COLORS.onSurface,
+    marginBottom: 16,
+    marginTop: 12,
+  },
 
-card:{
-flexDirection:"row",
-backgroundColor:COLORS.surfaceSecondary,
-borderRadius:RADIUS.lg,
-padding:18,
-marginBottom:18,
-borderWidth:1,
-borderColor:COLORS.border,
-},
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADIUS.lg,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
 
-selected:{
-borderColor:COLORS.brand,
-borderWidth:2,
-},
+  selected: {
+    borderColor: COLORS.brand,
+    borderWidth: 2,
+  },
 
-textArea:{
-flex:1,
-marginLeft:18,
-},
+  textArea: {
+    flex: 1,
+    marginLeft: 16,
+  },
 
-cardTitle:{
-fontSize:20,
-fontFamily:FONTS.serif,
-color:COLORS.onSurface,
-},
+  cardTitle: {
+    fontSize: 20,
+    fontFamily: FONTS.serif,
+    color: COLORS.onSurface,
+  },
 
-cardSub:{
-marginTop:8,
-color:COLORS.muted,
-lineHeight:22,
-},
+  cardSub: {
+    marginTop: 8,
+    color: COLORS.muted,
+    lineHeight: 22,
+    fontSize: 15,
+  },
 
-price:{
-marginTop:14,
-fontWeight:"700",
-fontSize:16,
-color:COLORS.brand,
-},
+  price: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.brand,
+  },
 
-notice:{
-flexDirection:"row",
-backgroundColor:COLORS.surfaceSecondary,
-padding:18,
-borderRadius:RADIUS.md,
-marginTop:8,
-},
+  dateCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADIUS.md,
+    padding: 18,
+    marginBottom: 20,
+  },
 
-noticeText:{
-flex:1,
-marginLeft:10,
-color:COLORS.muted,
-lineHeight:22,
-},
+  dateText: {
+    marginLeft: 14,
+    fontSize: 17,
+    color: COLORS.onSurface,
+    fontFamily: FONTS.sans,
+  },
 
-button:{
-marginTop:30,
-backgroundColor:COLORS.brand,
-padding:18,
-borderRadius:RADIUS.md,
-alignItems:"center",
-},
+  notice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADIUS.md,
+    padding: 18,
+    marginBottom: 30,
+  },
 
-buttonText:{
-fontSize:17,
-fontWeight:"700",
-color:"#000",
-},
+  noticeText: {
+    flex: 1,
+    marginLeft: 10,
+    color: COLORS.muted,
+    lineHeight: 24,
+    fontSize: 15,
+  },
 
-dateCard:{
-flexDirection:"row",
-alignItems:"center",
-backgroundColor:COLORS.surfaceSecondary,
-padding:18,
-borderRadius:RADIUS.md,
-marginBottom:22,
-},
+  button: {
+    backgroundColor: COLORS.brand,
+    paddingVertical: 18,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 40,
+  },
 
-dateText:{
-marginLeft:15,
-fontSize:17,
-color:COLORS.onSurface,
-fontFamily:FONTS.sans,
-},
+  buttonText: {
+    color: "#000",
+    fontSize: 18,
+    fontWeight: "700",
+  },
 
 });
