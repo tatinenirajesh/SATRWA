@@ -3481,16 +3481,20 @@ async def community_hall_book(
         )
 
     flat = await get_flat(
-        account["block"],
-        account["flat_no"],
+    account["block"],
+    account["flat_no"],
     )
 
-    dues = await compute_dues(flat)
+    balance = await get_outstanding(flat)
 
-    if dues["total_due"] > 0:
+    print("========== COMMUNITY HALL ==========")
+    print(balance)
+    print("====================================")
+
+    if balance["outstanding"] > 0:
         raise HTTPException(
             400,
-            "Maintenance dues must be cleared before booking."
+            f"Outstanding maintenance dues ₹{balance['outstanding']:.2f} must be cleared before booking."
         )
 
     existing = await hall_booking_exists(
