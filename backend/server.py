@@ -24,10 +24,8 @@ from receipt_engine import next_receipt
 from admin_payment_engine import verify_payment
 from payment_engine import (
     create_payment,
-    submit_payment,
-    create_gateway_order,
-    payment_success,
-    payment_failed,
+    PAYMENT_CREATED,
+    PAYMENT_SUCCESS,
 )
 from pdf_generator import generate_gate_pass
 from email_service import send_complaint_notification
@@ -5242,7 +5240,7 @@ async def community_hall_payment_success(body: dict):
             "Payment not found."
         )
 
-    if payment["status"] == PAYMENT_SUCCESS:
+    if payment["status"] == "PAYMENT_SUCCESS":
 
         return {
 
@@ -5261,7 +5259,7 @@ async def community_hall_payment_success(body: dict):
         {
             "$set": {
 
-                "status": PAYMENT_SUCCESS,
+                "status": "PAYMENT_SUCCESS",
 
                 "gateway_status": "SUCCESS",
 

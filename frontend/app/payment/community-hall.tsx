@@ -10,8 +10,8 @@ Alert,
 ScrollView,
 } from "react-native";
 
-import { COLORS } from "../../constants/colors";
-import { completeCommunityHallPayment } from "../../services/api";
+import { COLORS } from "@/src/theme";
+import { completeCommunityHallPayment } from "@/src/services/api";
 
 export default function CommunityHallPayment(){
 
