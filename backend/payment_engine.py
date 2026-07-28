@@ -79,6 +79,8 @@ async def create_payment(
 
     await db.payments.insert_one(payment)
 
+    payment.pop("_id", None)
+
     return payment
 
 

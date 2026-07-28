@@ -145,19 +145,15 @@ setSummary(res.data);
         <View style={styles.card}>
 
           <Text style={styles.row}>
-            Pending Months : {summary?.pending_count ?? 0}
+              Monthly Maintenance : ₹ {summary?.monthly_charge ?? 0}
           </Text>
 
           <Text style={styles.row}>
-            Maintenance : ₹ {summary?.maintenance_total ?? 0}
+              Credit Balance : ₹ {summary?.credit_balance ?? 0}
           </Text>
 
           <Text style={styles.row}>
-            Late Fee : ₹ {summary?.late_fee_total ?? 0}
-          </Text>
-
-          <Text style={styles.row}>
-            Opening Due : ₹ {summary?.opening_due_remaining ?? 0}
+              Total Payable : ₹ {summary?.total_due ?? 0}
           </Text>
 
         </View>

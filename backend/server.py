@@ -5229,84 +5229,127 @@ async def view_gate_pass(gate_pass_no:str):
 @api_router.post("/community-hall/payment-success")
 async def community_hall_payment_success(body: dict):
 
-    print("========== COMMUNITY HALL CHECK ==========")
-    print(body)
-
-    block = body["block"]
-    flat_no = body["flat_no"]
-    booking_date = body["booking_date"]
-
-    print("BLOCK :", block)
-    print("FLAT  :", flat_no)
-    print("DATE  :", booking_date)
-
-    # Get resident account
-    account = await accounts.find_one(
+    payment = await db.payments.find_one(
         {
-            "block": block,
-            "flat_no": flat_no,
+            "payment_id": body["payment_id"]
         }
     )
 
-    if not account:
+    if not payment:
+
+        raise HTTPException(
+            404,
+            "Payment not found."
+        )
+
+    if payment["status"] == PAYMENT_SUCCESS:
+
         return {
-            "available": False,
-            "reason": "ACCOUNT_NOT_FOUND",
-            "message": "Resident account not found."
+
+            "success": True,
+
+            "message": "Payment already processed.",
+
         }
 
-    # Use the same maintenance calculation as "My Dues"
-    flat = await get_flat(block, flat_no)
+    await db.payments.update_one(
 
-    balance = await get_outstanding(flat)
+        {
+            "payment_id": body["payment_id"]
+        },
 
-    print("========== BALANCE ==========")
-    print(balance)
-    print("=============================")
+        {
+            "$set": {
 
-    if balance["outstanding"] > 0:
-          return {
-            "available": False,
-            "reason": "DUE",
-            "message": f"You have an outstanding balance of ₹{balance['outstanding']:.2f}. Please clear your dues before booking any amenity.",
-            "redirect": "/maintenance"
+                "status": PAYMENT_SUCCESS,
+
+                "gateway_status": "SUCCESS",
+
+                "upi_id": body["upi_id"],
+
+                "upi_ref_no": body["upi_ref_no"],
+
+                "verified_at":
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+
             }
 
-    unpaid = await db.amenity_invoices.find_one({
-        "block": block,
-        "flat_no": flat_no,
-        "status": "PENDING"
-    })
-
-    print("UNPAID :", unpaid)
-
-    if unpaid:
-        print("FAILED : Pending Amenity Invoice")
-        return {
-            "available": False,
-            "reason": "AMENITY_DUE",
-            "message": "Please clear previous amenity invoices before making another booking."
         }
 
-    booking = await db.hall_bookings.find_one({
-        "booking_date": booking_date,
-        "booking_status": "BOOKED"
-    })
+    )
 
-    print("BOOKING :", booking)
+    receipt_no = await next_receipt_number()
 
-    if booking:
-        print("FAILED : Already Booked")
-        return {
-            "available": False,
-            "reason": "BOOKED",
-            "message": "Community Hall is already booked on this date."
-        }
+    receipt = {
 
-    print("SUCCESS : Available")
+        "receipt_no": receipt_no,
+
+        "payment_id": payment["payment_id"],
+
+        "module": "COMMUNITY_HALL",
+
+        "block": payment["block"],
+
+        "flat_no": payment["flat_no"],
+
+        "amount": payment["amount"],
+
+        "receipt_date":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
+        "status": "PAID",
+
+    }
+
+    await db.amenities_receipts.insert_one(receipt)
+
+    booking = {
+
+        "booking_id": str(uuid.uuid4()),
+
+        "payment_id": payment["payment_id"],
+
+        "receipt_no": receipt_no,
+
+        "email": payment["entity_id"],
+
+        "block": payment["block"],
+
+        "flat_no": payment["flat_no"],
+
+        "booking_date": body["booking_date"],
+
+        "function_hall": body["function_hall"],
+
+        "dining_hall": body["dining_hall"],
+
+        "booking_amount": payment["amount"],
+
+        "booking_status": "BOOKED",
+
+        "created_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
+    }
+
+    await db.hall_bookings.insert_one(booking)
 
     return {
-        "available": True
+
+        "success": True,
+
+        "receipt_no": receipt_no,
+
+        "booking_id": booking["booking_id"],
+
+        "message": "Community Hall booked successfully."
+
     }
 
 @api_router.get("/debug/payment-ledger")

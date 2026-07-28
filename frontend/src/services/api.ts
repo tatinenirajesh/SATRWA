@@ -287,3 +287,26 @@ export async function pendingPayments(){
     );
 
 }
+
+export async function completeCommunityHallPayment(body:any){
+
+const response=await fetch(
+
+`${API}/api/community-hall/payment-success`,
+
+{
+method:"POST",
+
+headers:{
+"Content-Type":"application/json",
+},
+
+body:JSON.stringify(body),
+
+}
+
+);
+
+return await response.json();
+
+}
