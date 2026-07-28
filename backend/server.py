@@ -3528,17 +3528,35 @@ async def community_hall_book(
         receipt_book="CLUBHOUSE",
     )
 
+    print("========== PAYMENT ==========")
+    print(payment)
+    print("=============================")
+
     return {
-        "success": True,
-        "amount": amount,
-        "payment": payment,
-        "booking_date": body.booking_date,
-        "function_hall": body.function_hall,
-        "dining_hall": body.dining_hall,
-        "session": body.session,
-        "payment_required": True,
-        "message": "Proceed to payment."
-    }
+
+    "success": True,
+
+    "message": "Proceed to payment.",
+
+    "payment": {
+
+        "payment_id": payment["payment_id"],
+
+        "amount": payment["amount"],
+
+        "status": payment["status"],
+
+    },
+
+    "amount": amount,
+
+    "booking_date": body.booking_date,
+
+    "function_hall": body.function_hall,
+
+    "dining_hall": body.dining_hall,
+
+}
 @api_router.get("/maintenance/summary")
 async def maintenance_summary(
     email: str,

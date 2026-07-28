@@ -254,7 +254,7 @@ export async function checkCommunityHall(body: any) {
 
 export async function bookCommunityHall(body: any) {
 
-    const r = await fetch(
+    const response = await fetch(
         `${API}/api/community-hall/book`,
         {
             method: "POST",
@@ -265,7 +265,19 @@ export async function bookCommunityHall(body: any) {
         }
     );
 
-    return await r.json();
+    const text = await response.text();
+
+    console.log("BOOK STATUS:", response.status);
+    console.log("BOOK RESPONSE:", text);
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        return {
+            success: false,
+            message: text,
+        };
+    }
 }
 
 export async function pendingPayments(){
