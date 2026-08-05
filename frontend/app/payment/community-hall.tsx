@@ -134,31 +134,30 @@ return;
 
 }
 
-const result =
-await completeCommunityHallPayment({
+const result = await completeCommunityHallPayment({
 
-payment_id: paymentId,
+    payment_id: paymentId,
 
-upi_id: upiId,
+    upi_id: upiId,
 
-upi_ref_no: upiRef,
+    upi_ref_no: upiRef,
 
-booking_date: bookingDate,
+    booking_date: bookingDate,
 
-function_hall: functionHall,
+    function_hall: functionHall,
 
-dining_hall: diningHall,
+    dining_hall: diningHall,
 
 });
 
-if(!result.success){
+if (!result || !result.success) {
 
-Alert.alert(
-"Payment",
-result.message
-);
+    Alert.alert(
+        "Payment",
+        result?.message || "Payment failed."
+    );
 
-return;
+    return;
 
 }
 

@@ -191,14 +191,14 @@ export async function guestRoomAvailability(
     checkin_date: string,
 ) {
     return request(
-        `/guest-room/availability?checkin_date=${checkin_date}`
+        `/guest-house/availability?checkin_date=${checkin_date}`
     );
 }
 
 export async function guestRoomBook(
     body: any,
 ) {
-    return request("/guest-room/book", {
+    return request("/guest-house/book", {
         method: "POST",
         body: JSON.stringify(body),
     });
@@ -288,25 +288,126 @@ export async function pendingPayments(){
 
 }
 
-export async function completeCommunityHallPayment(body:any){
+export async function completeCommunityHallPayment(body: any) {
 
-const response=await fetch(
+    try {
 
-`${API}/api/community-hall/payment-success`,
+        const response = await fetch(
+            `${API}/api/community-hall/payment-success`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(body),
+            }
+        );
 
-{
-method:"POST",
+        console.log("PAYMENT STATUS:", response.status);
 
-headers:{
-"Content-Type":"application/json",
-},
+        const text = await response.text();
 
-body:JSON.stringify(body),
+        console.log("PAYMENT RESPONSE:", text);
+
+        return JSON.parse(text);
+
+    } catch (e) {
+
+        console.log("PAYMENT ERROR:", e);
+
+        throw e;
+
+    }
 
 }
 
-);
+export async function bookGuestHouse(body: any) {
 
-return await response.json();
+    const r = await fetch(
+        `${API}/api/guest-house/book`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        }
+    );
 
+    return await r.json();
+}
+
+export async function completeGuestHousePayment(body: any) {
+
+    const r = await fetch(
+        `${API}/api/guest-house/payment-success`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        }
+    );
+
+    return await r.json();
+}
+
+export async function checkGuestRoomAvailability(
+    checkin_date: string,
+    checkin_time: string = "17:00"
+) {
+
+    return request(
+        `/api/guest-room/availability?checkin_date=${encodeURIComponent(
+            checkin_date
+        )}&checkin_time=${encodeURIComponent(
+            checkin_time
+        )}`
+    );
+
+}
+
+export async function bookGuestRoom(body: any) {
+
+    console.log("BOOK BODY:", body);
+
+    const response = await fetch(
+        `${API}/api/guest-house/book`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        }
+    );
+
+    console.log("BOOK STATUS:", response.status);
+
+    const text = await response.text();
+
+    console.log("BOOK RESPONSE:", text);
+
+    return JSON.parse(text);
+
+}
+
+export async function completeGuestRoomPayment(body: {
+  payment_id: string;
+  upi_id: string;
+  upi_ref_no: string;
+}) {
+  const response = await fetch(
+    `${API}/api/guest-house/payment-success`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  return response.json();
 }

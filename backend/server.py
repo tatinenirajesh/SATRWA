@@ -10,8 +10,10 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 import uuid
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from amenity_engine import GYM_SLOTS, POOL_SLOTS, gym_cycle, pool_cycle
+from receipt_engine import next_receipt
+from booking_engine import create_booking
 
 import pandas as pd
 from reportlab.lib.pagesizes import A5
@@ -48,8 +50,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-env_path = ROOT_DIR / ".env"
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(env_path)
 load_dotenv(env_path)
 
 print("=" * 60)
@@ -59,7 +61,10 @@ print("LOAD RESULT :", load_dotenv(env_path))
 print("MONGO_URL :", os.getenv("MONGO_URL"))
 print("=" * 60)
 
-mongo_url = os.environ["MONGO_URL"]
+mongo_url = os.getenv("MONGO_URL")
+
+if not mongo_url:
+    raise Exception(f"MONGO_URL not found in {env_path}")
 
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
@@ -342,26 +347,13 @@ class GuestRoomAvailabilityRequest(BaseModel):
 
 class GuestRoomBookingRequest(BaseModel):
     email: str
-    room: Literal["101","201","202"]
-
-    checkin_date: str
-    checkout_date: str
-
-    checkin_time: str
-    checkout_time: str
-
-    upi_id: str
-    upi_ref_no: str
-
-class GuestRoomBookingRequest(BaseModel):
-    email: str
     room: Literal["101", "201", "202"]
+
     checkin_date: str
     checkout_date: str
+
     checkin_time: str
     checkout_time: str
-    upi_id: str
-    upi_ref_no: str
 
 class FlatRegister(BaseModel):
     role: Literal["OWNER", "TENANT"]
@@ -583,15 +575,13 @@ async def hall_booking_exists(
     booking_date: str,
 ):
 
-    return await community_hall_bookings.find_one(
+    return await db.bookings.find_one(
         {
+            "module": "COMMUNITY_HALL",
+
             "booking_date": booking_date,
-            "status": {
-                "$in": [
-                    BOOKING_CONFIRMED,
-                    BOOKING_RESERVED,
-                ]
-            },
+
+            "booking_status": "BOOKED",
         }
     )
 
@@ -3251,18 +3241,28 @@ async def guest_room_availability(
 
     for room in ROOMS:
 
-        booking = await guest_room_bookings.find_one(
-            {
-                "room": room,
-                "status": {
-                    "$in": [
-                        BOOKING_RESERVED,
-                        BOOKING_CONFIRMED,
-                        BOOKING_CHECKED_IN,
-                    ]
-                },
+        booking = await db.bookings.find_one(
+
+        {
+
+            "module": "GUEST_HOUSE",
+
+            "room": room,
+
+            "booking_status": "BOOKED",
+
+            "checkin_date": {
+                "$lte": checkin_date,
             },
-            sort=[("checkout_date", -1)],
+
+            "checkout_date": {
+                "$gt": checkin_date,
+            },
+
+        },
+
+        {"_id": 0},
+
         )
 
         available = room_available_for_checkin(
@@ -3309,9 +3309,13 @@ def next_available_date(
         dt + timedelta(days=1)
     ).strftime("%Y-%m-%d")
 
+
+@api_router.post("/guest-house/book")
 async def guest_room_book(
     body: GuestRoomBookingRequest,
 ):
+
+    print(body)
 
     account = await accounts.find_one(
         {
@@ -3331,44 +3335,46 @@ async def guest_room_book(
         account["flat_no"],
     )
 
-    dues = await compute_dues(flat)
+    balance = await get_outstanding(flat)
 
-    if dues["total_due"] > 0:
+    if balance["outstanding"] > 0:
         raise HTTPException(
             400,
-            "Maintenance dues must be cleared before booking."
+            f"Outstanding maintenance dues ₹{balance['outstanding']:.2f} must be cleared before booking."
         )
 
-    existing = await guest_room_bookings.find_one(
-        {
-            "room": body.room,
-            "status": {
-                "$in": [
-                    BOOKING_RESERVED,
-                    BOOKING_CONFIRMED,
-                    BOOKING_CHECKED_IN,
+    existing = await db.bookings.find_one(
+    {
+        "module": "GUEST_HOUSE",
+        "room": body.room,
+        "booking_status":{
+            "$in":[
+                "BOOKED",
+                "CHECKED_IN",
+                "RESERVED",
                 ]
             },
-            "$or": [
-                {
-                    "checkin_date": {
-                        "$lte": body.checkin_date,
-                    },
-                    "checkout_date": {
-                        "$gte": body.checkin_date,
-                    },
+        "$or": [
+            {
+                "checkin_date": {
+                    "$lte": body.checkin_date,
                 },
-                {
-                    "checkin_date": {
-                        "$lte": body.checkout_date,
-                    },
-                    "checkout_date": {
-                        "$gte": body.checkout_date,
-                    },
+                "checkout_date": {
+                    "$gte": body.checkin_date,
                 },
-            ],
-        }
-    )
+            },
+            {
+                "checkin_date": {
+                    "$lte": body.checkout_date,
+                },
+                "checkout_date": {
+                    "$gte": body.checkout_date,
+                },
+            },
+        ],
+    },
+    {"_id": 0},
+)
 
     if existing:
         raise HTTPException(
@@ -3388,39 +3394,220 @@ async def guest_room_book(
             "Maximum two guest rooms can be booked per flat."
         )
 
-    amount = await room_rate(body.room)
+    room_amount = await room_rate(
+        body.room
+    )
 
-    await guest_room_bookings.insert_one(
-        {
-            "id": str(uuid.uuid4()),
-            "email": body.email.lower(),
-            "block": account["block"],
-            "flat_no": account["flat_no"],
+    checkin = datetime.strptime(
+        body.checkin_date,
+        "%Y-%m-%d",
+    )
+
+    checkout = datetime.strptime(
+        body.checkout_date,
+        "%Y-%m-%d",
+    )
+
+    days = max((checkout - checkin).days, 1)
+
+    amount = room_amount * days
+
+    payment = await create_payment(
+
+        db=db,
+
+        module="GUEST_HOUSE",
+
+        entity_type="RESIDENT",
+
+        entity_id=f"{account['block']}-{account['flat_no']}",
+
+        payer_name=account["owner_name"],
+
+        block=account["block"],
+
+        flat_no=account["flat_no"],
+
+        amount=amount,
+
+        payment_mode="ICICI",
+
+        receipt_book="GUEST_HOUSE",
+
+        metadata={
 
             "room": body.room,
 
             "checkin_date": body.checkin_date,
+
             "checkout_date": body.checkout_date,
 
             "checkin_time": body.checkin_time,
+
             "checkout_time": body.checkout_time,
 
-            "amount": amount,
+            "days": days,
 
-            "status": "CONFIRMED",
+        },
 
-            "upi_id": body.upi_id,
-            "upi_ref_no": body.upi_ref_no,
-
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
     )
 
     return {
+
         "success": True,
+
+        "message": "Proceed to payment.",
+
+        "payment": {
+
+            "payment_id": payment["payment_id"],
+
+            "amount": payment["amount"],
+
+            "status": payment["status"],
+
+        },
+
         "room": body.room,
+
+        "days": days,
+
         "amount": amount,
-        "status": "CONFIRMED",
+
+        "checkin_date": body.checkin_date,
+
+        "checkout_date": body.checkout_date,
+
+        "checkin_time": body.checkin_time,
+
+        "checkout_time": body.checkout_time,
+
+    }
+@api_router.post("/guest-house/payment-success")
+async def guest_house_payment_success(body: dict):
+
+    payment = await db.payments.find_one(
+        {
+            "payment_id": body["payment_id"],
+        },
+        {"_id": 0},
+    )
+
+    if not payment:
+        raise HTTPException(
+            404,
+            "Payment not found."
+        )
+
+    if payment["status"] == PAYMENT_SUCCESS:
+        return {
+            "success": True,
+            "message": "Booking already completed."
+        }
+
+    await db.payments.update_one(
+        {
+            "payment_id": body["payment_id"],
+        },
+        {
+            "$set": {
+            "status": PAYMENT_SUCCESS,
+            "gateway_status": "SUCCESS",
+            "upi_id": body.get("upi_id", ""),
+            "upi_ref_no": body.get("upi_ref_no", ""),
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }
+        }
+    )
+
+    payment = await db.payments.find_one(
+        {
+            "payment_id": body["payment_id"],
+        },
+        {"_id": 0},
+    )
+
+    receipt_no = await next_receipt(
+        db,
+        "GUEST_HOUSE",
+    )
+
+    await db.amenities_receipts.insert_one({
+
+        "receipt_no": receipt_no,
+
+        "payment_id": payment["payment_id"],
+
+        "module": "GUEST_HOUSE",
+
+        "block": payment["block"],
+
+        "flat_no": payment["flat_no"],
+
+        "amount": payment["amount"],
+
+        "status": "PAID",
+
+        "receipt_date": datetime.now(
+            timezone.utc
+        ).isoformat(),
+
+    })
+
+    existing = await db.bookings.find_one(
+    {
+        "module": "GUEST_HOUSE",
+        "payment_id": payment["payment_id"],
+    },
+    {"_id": 0},
+)
+
+    if existing:
+
+        return {
+
+            "success": True,
+
+            "receipt_no": existing["receipt_no"],
+
+            "message": "Booking already completed.",
+
+        }
+
+    meta = payment.get("metadata", {})
+
+    await create_booking(
+
+        db=db,
+
+        module="GUEST_HOUSE",
+
+        payment=payment,
+
+        booking_date=meta["checkin_date"],
+
+        receipt_no=receipt_no,
+
+        room=meta["room"],
+
+        checkin_date=meta["checkin_date"],
+
+        checkout_date=meta["checkout_date"],
+
+        checkin_time=meta["checkin_time"],
+
+        checkout_time=meta["checkout_time"],
+
+    )
+
+    return {
+
+        "success": True,
+
+        "receipt_no": receipt_no,
+
+        "message": "Guest House booked successfully.",
+
     }
 
 @api_router.get("/community-hall/availability")
@@ -3428,19 +3615,21 @@ async def community_hall_availability(
     booking_date: str,
 ):
 
-    fh = await community_hall_bookings.find_one(
+    fh = await db.bookings.find_one(
         {
+            "module": "COMMUNITY_HALL",
             "booking_date": booking_date,
             "function_hall": True,
-            "status": BOOKING_CONFIRMED,
+            "booking_status": "BOOKED",
         }
     )
 
-    dh = await community_hall_bookings.find_one(
+    dh = await db.bookings.find_one(
         {
+            "module": "COMMUNITY_HALL",
             "booking_date": booking_date,
             "dining_hall": True,
-            "status": BOOKING_CONFIRMED,
+            "booking_status": "BOOKED",
         }
     )
 
@@ -5230,57 +5419,101 @@ async def community_hall_payment_success(body: dict):
     payment = await db.payments.find_one(
         {
             "payment_id": body["payment_id"]
-        }
+        },
+        {"_id": 0},
     )
 
     if not payment:
-
         raise HTTPException(
             404,
             "Payment not found."
         )
 
-    if payment["status"] == "PAYMENT_SUCCESS":
-
+    if payment["status"] == PAYMENT_SUCCESS:
         return {
-
             "success": True,
-
             "message": "Payment already processed.",
-
         }
 
-    await db.payments.update_one(
+    # FINAL AVAILABILITY CHECK
+    existing = await hall_booking_exists(
+        body["booking_date"],
+    )
 
+    if existing:
+        raise HTTPException(
+            400,
+            "Community Hall is already booked for this date."
+        )
+
+    existing = await guest_room_bookings.find_one(
+    {
+        "room": body["room"],
+        "status": {
+            "$in": [
+                BOOKING_RESERVED,
+                BOOKING_CONFIRMED,
+                BOOKING_CHECKED_IN,
+            ]
+        },
+        "$or": [
+            {
+                "checkin_date": {
+                    "$lte": body["checkin_date"],
+                },
+                "checkout_date": {
+                    "$gte": body["checkin_date"],
+                },
+            },
+            {
+                "checkin_date": {
+                    "$lte": body["checkout_date"],
+                },
+                "checkout_date": {
+                    "$gte": body["checkout_date"],
+                },
+            },
+        ],
+    }
+)
+
+    if existing:
+        raise HTTPException(
+            400,
+            "Selected room is no longer available."
+        )
+
+    # Mark payment successful
+    await db.payments.update_one(
         {
             "payment_id": body["payment_id"]
         },
-
         {
             "$set": {
-
-                "status": "PAYMENT_SUCCESS",
-
+                "status": PAYMENT_SUCCESS,
                 "gateway_status": "SUCCESS",
-
-                "upi_id": body["upi_id"],
-
-                "upi_ref_no": body["upi_ref_no"],
-
-                "verified_at":
-                    datetime.now(
-                        timezone.utc
-                    ).isoformat(),
-
+                "upi_id": body.get("upi_id", ""),
+                "upi_ref_no": body.get("upi_ref_no", ""),
+                "verified_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
             }
-
         }
-
     )
 
-    receipt_no = await next_receipt_number()
+    payment = await db.payments.find_one(
+        {
+            "payment_id": body["payment_id"]
+        },
+        {"_id": 0},
+    )
 
-    receipt = {
+    receipt_no = await next_receipt(
+        db,
+        "COMMUNITY_HALL",
+    )
+
+    await db.amenities_receipts.insert_one({
 
         "receipt_no": receipt_no,
 
@@ -5294,49 +5527,29 @@ async def community_hall_payment_success(body: dict):
 
         "amount": payment["amount"],
 
-        "receipt_date":
-            datetime.now(
-                timezone.utc
-            ).isoformat(),
-
         "status": "PAID",
 
-    }
+        "receipt_date": datetime.now(
+            timezone.utc
+        ).isoformat(),
 
-    await db.amenities_receipts.insert_one(receipt)
+    })
 
-    booking = {
+    await create_booking(
+        db,
 
-        "booking_id": str(uuid.uuid4()),
+        module="COMMUNITY_HALL",
 
-        "payment_id": payment["payment_id"],
+        payment=payment,
 
-        "receipt_no": receipt_no,
+        booking_date=body["booking_date"],
 
-        "email": payment["entity_id"],
+        receipt_no=receipt_no,
 
-        "block": payment["block"],
+        function_hall=body["function_hall"],
 
-        "flat_no": payment["flat_no"],
-
-        "booking_date": body["booking_date"],
-
-        "function_hall": body["function_hall"],
-
-        "dining_hall": body["dining_hall"],
-
-        "booking_amount": payment["amount"],
-
-        "booking_status": "BOOKED",
-
-        "created_at":
-            datetime.now(
-                timezone.utc
-            ).isoformat(),
-
-    }
-
-    await db.hall_bookings.insert_one(booking)
+        dining_hall=body["dining_hall"],
+    )
 
     return {
 
@@ -5344,9 +5557,7 @@ async def community_hall_payment_success(body: dict):
 
         "receipt_no": receipt_no,
 
-        "booking_id": booking["booking_id"],
-
-        "message": "Community Hall booked successfully."
+        "message": "Community Hall booked successfully.",
 
     }
 

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import uuid
 
 PAYMENT_CREATED = "PAYMENT_CREATED"
+PAYMENT_SUCCESS = "PAYMENT_SUCCESS"
 PAYMENT_PENDING = "PAYMENT_PENDING_VERIFICATION"
 PAYMENT_VERIFIED = "PAYMENT_VERIFIED"
 PAYMENT_REJECTED = "PAYMENT_REJECTED"
@@ -21,6 +22,7 @@ async def create_payment(
     receipt_book,
     remarks="",
     reference_id=None,
+    metadata=None,
 ):
 
     payment = {
@@ -70,6 +72,8 @@ async def create_payment(
         "verified_at": None,
 
         "remarks": remarks,
+
+        "metadata": metadata or {},
 
         "created_at": datetime.now(
             timezone.utc

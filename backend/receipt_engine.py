@@ -1,42 +1,49 @@
-from pymongo import ReturnDocument
+from datetime import datetime
 
+RECEIPT_PREFIX = {
+    "MAINTENANCE": "MR",
+    "COMMUNITY_HALL": "CH",
+    "GUEST_HOUSE": "GH",
+    "AMENITY": "AM",
+    "CORPUS": "CF",
+    "DONATION": "DN",
+}
 
-async def next_receipt(
+async def next_receipt(db, module):
 
-    db,
+    today = datetime.now()
 
-    book,
+    year = today.strftime("%Y")
+    month = today.strftime("%m")
 
-):
+    prefix = RECEIPT_PREFIX.get(module, "RC")
 
-    doc = await db.receipt_books.find_one_and_update(
+    key = f"{prefix}-{year}-{month}"
 
-        {
-
-            "book": book,
-
-        },
-
-        {
-
-            "$inc": {
-
-                "current": 1,
-
-            }
-
-        },
-
-        return_document=ReturnDocument.AFTER,
-
+    series = await db.receipt_series.find_one(
+        {"key": key}
     )
 
-    if not doc:
+    if not series:
 
-        raise Exception(
+        await db.receipt_series.insert_one({
+            "key": key,
+            "last_no": 1,
+        })
 
-            f"Receipt book {book} not found."
+        number = 1
 
+    else:
+
+        number = series["last_no"] + 1
+
+        await db.receipt_series.update_one(
+            {"key": key},
+            {
+                "$set": {
+                    "last_no": number
+                }
+            }
         )
 
-    return f"{doc['prefix']}-{doc['current']:06d}"
+    return f"{prefix}-{year}{month}-{number:05d}"
