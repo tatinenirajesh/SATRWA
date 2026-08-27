@@ -28,7 +28,7 @@ export default function AmenityHome() {
     <View style={styles.container}>
 
       <LinearGradient
-        colors={["#1a1508","#0A0A0A"]}
+        colors={["#1a1508", "#0A0A0A"]}
         style={styles.header}
       >
 
@@ -51,7 +51,7 @@ export default function AmenityHome() {
               Amenities
             </Text>
 
-            <View style={{width:40}}/>
+            <View style={{ width: 40 }} />
 
           </View>
 
@@ -83,19 +83,10 @@ export default function AmenityHome() {
 
         <Card
           icon="barbell-outline"
-          title="Gym"
-          subtitle="Membership"
+          title="Fitness & Recreation"
+          subtitle="Gymnasium and Swimming Pool"
           onPress={() =>
             router.push("/gym-pool?tab=gym")
-          }
-        />
-
-        <Card
-          icon="water-outline"
-          title="Swimming Pool"
-          subtitle="Book pool access"
-          onPress={() =>
-            router.push("/gym-pool?tab=pool")
           }
         />
 
@@ -112,9 +103,9 @@ function Card({
   title,
   subtitle,
   onPress,
-}:any){
+}: any) {
 
-  return(
+  return (
 
     <Pressable
       style={styles.card}
@@ -131,7 +122,7 @@ function Card({
 
       </View>
 
-      <View style={{flex:1}}>
+      <View style={{ flex: 1 }}>
 
         <Text style={styles.cardTitle}>
           {title}
@@ -157,73 +148,73 @@ function Card({
 
 const styles = StyleSheet.create({
 
-container:{
-flex:1,
-backgroundColor:COLORS.surface,
-},
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+  },
 
-header:{
-paddingBottom:SPACING.lg,
-},
+  header: {
+    paddingBottom: SPACING.lg,
+  },
 
-headerRow:{
-flexDirection:"row",
-justifyContent:"space-between",
-alignItems:"center",
-paddingHorizontal:SPACING.lg,
-paddingTop:SPACING.sm,
-},
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+  },
 
-back:{
-width:40,
-height:40,
-borderRadius:20,
-justifyContent:"center",
-alignItems:"center",
-backgroundColor:COLORS.surfaceSecondary,
-},
+  back: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceSecondary,
+  },
 
-title:{
-fontSize:24,
-fontFamily:FONTS.serif,
-color:COLORS.onSurface,
-},
+  title: {
+    fontSize: 24,
+    fontFamily: FONTS.serif,
+    color: COLORS.onSurface,
+  },
 
-body:{
-padding:SPACING.xl,
-},
+  body: {
+    padding: SPACING.xl,
+  },
 
-card:{
-flexDirection:"row",
-alignItems:"center",
-backgroundColor:COLORS.surfaceSecondary,
-padding:20,
-borderRadius:RADIUS.lg,
-marginBottom:18,
-borderWidth:1,
-borderColor:COLORS.border,
-},
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceSecondary,
+    padding: 20,
+    borderRadius: RADIUS.lg,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
 
-iconCircle:{
-width:60,
-height:60,
-borderRadius:30,
-justifyContent:"center",
-alignItems:"center",
-backgroundColor:COLORS.brandTint,
-marginRight:18,
-},
+  iconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: COLORS.brandTint,
+    marginRight: 18,
+  },
 
-cardTitle:{
-fontSize:20,
-fontFamily:FONTS.serif,
-color:COLORS.onSurface,
-},
+  cardTitle: {
+    fontSize: 20,
+    fontFamily: FONTS.serif,
+    color: COLORS.onSurface,
+  },
 
-cardSub:{
-marginTop:5,
-fontFamily:FONTS.sans,
-color:COLORS.muted,
-},
+  cardSub: {
+    marginTop: 5,
+    fontFamily: FONTS.sans,
+    color: COLORS.muted,
+  },
 
 });

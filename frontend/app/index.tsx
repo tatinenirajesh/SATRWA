@@ -1,15 +1,31 @@
-import React, { useEffect, useRef } from "react";
+import React, {
+  useEffect,
+  useRef,
+} from "react";
+
 import {
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 
-import { BrandLogo } from "@/src/components/BrandLogo";
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
+
+import {
+  LinearGradient,
+} from "expo-linear-gradient";
+
+import {
+  router,
+} from "expo-router";
+
+import {
+  BrandLogo,
+} from "@/src/components/BrandLogo";
+
 import {
   COLORS,
   SPACING,
@@ -17,76 +33,257 @@ import {
   FONTS,
 } from "@/src/theme";
 
-import { getSession } from "@/src/services/session";
+import {
+  getSession,
+} from "@/src/services/session";
+
 
 export default function LandingScreen() {
 
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timer =
+    useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
+
 
   useEffect(() => {
 
-    async function load() {
+    let isMounted = true;
 
-      const session = await getSession();
 
-      if (session) {
+    async function loadSession() {
 
-        router.replace("/resident-home");
+      try {
+
+        const session =
+          await getSession();
+
+
+        if (
+          !isMounted ||
+          !session
+        ) {
+
+          return;
+
+        }
+
+
+        /* ==============================
+           RESIDENT
+        ============================== */
+
+        if (
+          session.role === "OWNER" ||
+          session.role === "TENANT"
+        ) {
+
+          router.replace(
+            "/resident-home"
+          );
+
+          return;
+
+        }
+
+
+        /* ==============================
+           COMMERCIAL
+        ============================== */
+
+        if (
+          session.role === "COMMERCIAL"
+        ) {
+
+          if (
+            session.account_type ===
+            "CANTEEN"
+          ) {
+
+            router.replace(
+              "/commercial-canteen-dashboard"
+            );
+
+            return;
+
+          }
+
+
+          if (
+            session.account_type ===
+            "SUPERMARKET"
+          ) {
+
+              router.push({
+              pathname: "/commercial-signin",
+              params: {
+                type: "SUPERMARKET",
+              },
+            });
+
+            return;
+
+          }
+
+        }
+
+
+        /* ==============================
+           CORPORATE
+        ============================== */
+
+        if (
+          session.role === "CORPORATE"
+        ) {
+
+          router.replace(
+            "/corporate-account"
+          );
+
+          return;
+
+        }
+
+
+        /* ==============================
+           ADMIN
+        ============================== */
+
+        if (
+          session.role === "ADMIN"
+        ) {
+
+          router.replace(
+            "/admin"
+          );
+
+          return;
+
+        }
+
+      } catch (error) {
+
+        console.log(
+          "SESSION LOAD ERROR:",
+          error
+        );
 
       }
 
     }
 
-    load();
+
+    loadSession();
+
+
+    return () => {
+
+      isMounted =
+        false;
+
+
+      if (
+        timer.current
+      ) {
+
+        clearTimeout(
+          timer.current
+        );
+
+      }
+
+    };
 
   }, []);
 
+
   function startAdminTimer() {
 
-    timer.current = setTimeout(() => {
+    if (
+      timer.current
+    ) {
 
-      router.push("/admin");
-
-    },5000);
-
-  }
-
-function stopTimer(){
-
-    if(timer.current){
-
-        clearTimeout(timer.current);
-
-        timer.current = null;
+      clearTimeout(
+        timer.current
+      );
 
     }
 
-}
 
-  return(
+    timer.current =
+      setTimeout(
+        () => {
 
-    <View style={styles.container}>
+          router.push(
+            "/admin"
+          );
+
+        },
+        5000
+      );
+
+  }
+
+
+  function stopAdminTimer() {
+
+    if (
+      timer.current
+    ) {
+
+      clearTimeout(
+        timer.current
+      );
+
+      timer.current =
+        null;
+
+    }
+
+  }
+
+
+  return (
+
+    <View
+      style={styles.container}
+    >
 
       <LinearGradient
-        colors={["#1a1508","#0A0A0A"]}
+        colors={[
+          "#1a1508",
+          "#0A0A0A",
+        ]}
         style={styles.header}
       >
 
         <SafeAreaView>
 
           <Pressable
-            onPressIn={startAdminTimer}
-            onPressOut={stopTimer}
-            style={styles.logoArea}
+            onPressIn={
+              startAdminTimer
+            }
+            onPressOut={
+              stopAdminTimer
+            }
+            style={
+              styles.logoArea
+            }
           >
 
-            <BrandLogo size={96}/>
+            <BrandLogo
+              size={96}
+            />
 
-            <Text style={styles.title}>
+            <Text
+              style={styles.title}
+            >
               SATRWA
             </Text>
 
-            <Text style={styles.subtitle}>
+            <Text
+              style={styles.subtitle}
+            >
               Sri Anjaneya Township
             </Text>
 
@@ -96,51 +293,85 @@ function stopTimer(){
 
       </LinearGradient>
 
-      <View style={styles.body}>
 
-        <Text style={styles.welcome}>
+      <View
+        style={styles.body}
+      >
+
+        <Text
+          style={styles.welcome}
+        >
           Welcome Home
         </Text>
 
+
+        {/* INDIVIDUAL */}
+
         <Pressable
           style={styles.card}
-          onPress={()=>router.push("/individual")}
+          onPress={() =>
+            router.push(
+              "/individual"
+            )
+          }
         >
 
-          <Text style={styles.cardIcon}>
+          <Text
+            style={styles.cardIcon}
+          >
             🏠
           </Text>
 
-          <Text style={styles.cardTitle}>
+          <Text
+            style={styles.cardTitle}
+          >
             Individual
           </Text>
 
-          <Text style={styles.cardSub}>
+          <Text
+            style={styles.cardSub}
+          >
             Owners & Tenants
           </Text>
 
         </Pressable>
 
+
+        {/* CORPORATE / COMMERCIAL */}
+
         <Pressable
           style={styles.card}
-          onPress={()=>router.push("/corporate-login")}
+          onPress={() =>
+            router.push(
+              "/corporate"
+            )
+          }
         >
 
-          <Text style={styles.cardIcon}>
+          <Text
+            style={styles.cardIcon}
+          >
             🏢
           </Text>
 
-          <Text style={styles.cardTitle}>
+          <Text
+            style={styles.cardTitle}
+          >
             Corporate
           </Text>
 
-          <Text style={styles.cardSub}>
-            Schools & Companies
+          <Text
+            style={styles.cardSub}
+          >
+            Schools, Companies & Commercial
           </Text>
 
         </Pressable>
 
-        <Text style={styles.version}>
+
+        <Text
+          style={styles.version}
+        >
           Version 1.0.0
         </Text>
 
@@ -152,86 +383,200 @@ function stopTimer(){
 
 }
 
-const styles=StyleSheet.create({
 
-container:{
-flex:1,
-backgroundColor:COLORS.surface,
-},
+const styles =
+  StyleSheet.create({
 
-header:{
-paddingBottom:SPACING.xxxl,
-},
+    container: {
 
-logoArea:{
-alignItems:"center",
-paddingTop:SPACING.xxxl,
-},
+      flex: 1,
 
-title:{
-fontFamily:FONTS.serif,
-fontSize:34,
-color:COLORS.brand,
-marginTop:SPACING.lg,
-},
+      backgroundColor:
+        COLORS.surface,
 
-subtitle:{
-fontFamily:FONTS.sans,
-color:COLORS.onSurface,
-fontSize:14,
-marginTop:4,
-},
+    },
 
-body:{
-flex:1,
-backgroundColor:COLORS.surface,
-marginTop:-18,
-borderTopLeftRadius:28,
-borderTopRightRadius:28,
-padding:SPACING.xl,
-},
 
-welcome:{
-fontFamily:FONTS.serif,
-fontSize:28,
-color:COLORS.onSurface,
-textAlign:"center",
-marginBottom:SPACING.xxl,
-},
+    header: {
 
-card:{
-backgroundColor:COLORS.surfaceSecondary,
-borderWidth:1,
-borderColor:COLORS.border,
-borderRadius:RADIUS.lg,
-padding:SPACING.xl,
-marginBottom:SPACING.lg,
-alignItems:"center",
-},
+      paddingBottom:
+        SPACING.xxxl,
 
-cardIcon:{
-fontSize:42,
-},
+    },
 
-cardTitle:{
-fontFamily:FONTS.serif,
-fontSize:24,
-color:COLORS.brand,
-marginTop:12,
-},
 
-cardSub:{
-fontFamily:FONTS.sans,
-color:COLORS.muted,
-marginTop:4,
-},
+    logoArea: {
 
-version:{
-textAlign:"center",
-marginTop:"auto",
-marginBottom:SPACING.lg,
-color:COLORS.muted,
-fontFamily:FONTS.sans,
-}
+      alignItems:
+        "center",
 
-});
+      paddingTop:
+        SPACING.xxxl,
+
+    },
+
+
+    title: {
+
+      fontFamily:
+        FONTS.serif,
+
+      fontSize:
+        34,
+
+      color:
+        COLORS.brand,
+
+      marginTop:
+        SPACING.lg,
+
+    },
+
+
+    subtitle: {
+
+      fontFamily:
+        FONTS.sans,
+
+      color:
+        COLORS.onSurface,
+
+      fontSize:
+        14,
+
+      marginTop:
+        4,
+
+    },
+
+
+    body: {
+
+      flex: 1,
+
+      backgroundColor:
+        COLORS.surface,
+
+      marginTop:
+        -18,
+
+      borderTopLeftRadius:
+        28,
+
+      borderTopRightRadius:
+        28,
+
+      padding:
+        SPACING.xl,
+
+    },
+
+
+    welcome: {
+
+      fontFamily:
+        FONTS.serif,
+
+      fontSize:
+        28,
+
+      color:
+        COLORS.onSurface,
+
+      textAlign:
+        "center",
+
+      marginBottom:
+        SPACING.xxl,
+
+    },
+
+
+    card: {
+
+      backgroundColor:
+        COLORS.surfaceSecondary,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
+
+      borderRadius:
+        RADIUS.lg,
+
+      padding:
+        SPACING.xl,
+
+      marginBottom:
+        SPACING.lg,
+
+      alignItems:
+        "center",
+
+    },
+
+
+    cardIcon: {
+
+      fontSize:
+        42,
+
+    },
+
+
+    cardTitle: {
+
+      fontFamily:
+        FONTS.serif,
+
+      fontSize:
+        24,
+
+      color:
+        COLORS.brand,
+
+      marginTop:
+        12,
+
+    },
+
+
+    cardSub: {
+
+      fontFamily:
+        FONTS.sans,
+
+      color:
+        COLORS.muted,
+
+      marginTop:
+        4,
+
+      textAlign:
+        "center",
+
+    },
+
+
+    version: {
+
+      textAlign:
+        "center",
+
+      marginTop:
+        "auto",
+
+      marginBottom:
+        SPACING.lg,
+
+      color:
+        COLORS.muted,
+
+      fontFamily:
+        FONTS.sans,
+
+    },
+
+  });

@@ -36,7 +36,7 @@ import {
 } from "@/src/theme";
 
 
-export default function CorporateScreen() {
+export default function CommercialCanteenScreen() {
 
   return (
 
@@ -65,13 +65,13 @@ export default function CorporateScreen() {
             <Text
               style={styles.title}
             >
-              Commercial & Corporate
+              Canteen
             </Text>
 
             <Text
               style={styles.subtitle}
             >
-              Select your category
+              Manage your account and payments
             </Text>
 
           </View>
@@ -87,68 +87,61 @@ export default function CorporateScreen() {
         }
       >
 
-        {/* CANTEEN */}
+        {/* LOGIN */}
 
-        <Pressable
-          style={styles.card}
-          onPress={() =>
-            router.push(
-              "/commercial-canteen"
-            )
-          }
-        >
+                <Pressable
+            style={styles.card}
+            onPress={() => {
 
-          <View
-            style={styles.iconCircle}
+              console.log(
+                "CANTEEN LOGIN BUTTON CLICKED"
+              );
+
+              console.log(
+                "GOING TO: /commercial-signin"
+              );
+
+              router.push({
+                pathname: "/commercial-signin",
+                params: {
+                  type: "CANTEEN",
+                },
+              });
+
+            }}
           >
-
+          <View style={styles.iconCircle}>
             <Ionicons
-              name="restaurant-outline"
-              size={32}
+              name="log-in-outline"
+              size={36}
               color={COLORS.brand}
             />
-
           </View>
 
+          <Text style={styles.cardTitle}>
+            Login
+          </Text>
 
-          <View
-            style={styles.cardContent}
-          >
-
-            <Text
-              style={styles.cardTitle}
-            >
-              Canteen
-            </Text>
-
-            <Text
-              style={styles.cardText}
-            >
-              Manage rent, electricity
-              meter readings and payments.
-            </Text>
-
-          </View>
-
-
-          <Ionicons
-            name="chevron-forward"
-            size={24}
-            color={COLORS.muted}
-          />
-
+          <Text style={styles.cardText}>
+            Already registered? Sign in
+            to view your rent, electricity
+            bill and payment details.
+          </Text>
         </Pressable>
 
 
-        {/* SUPER MARKET */}
+        {/* REGISTER */}
 
         <Pressable
           style={styles.card}
           onPress={() =>
             router.push({
-              pathname: "/commercial-signin",
+              pathname:
+                "/commercial-register",
+
               params: {
-                type: "SUPERMARKET",
+                type:
+                  "CANTEEN",
               },
             })
           }
@@ -159,98 +152,34 @@ export default function CorporateScreen() {
           >
 
             <Ionicons
-              name="storefront-outline"
-              size={32}
+              name="person-add-outline"
+              size={36}
               color={COLORS.brand}
             />
 
           </View>
 
 
-          <View
-            style={styles.cardContent}
+          <Text
+            style={styles.cardTitle}
           >
-
-            <Text
-              style={styles.cardTitle}
-            >
-              Super Market
-            </Text>
-
-            <Text
-              style={styles.cardText}
-            >
-              View monthly rent,
-              charges and payments.
-            </Text>
-
-          </View>
+            Register
+          </Text>
 
 
-          <Ionicons
-            name="chevron-forward"
-            size={24}
-            color={COLORS.muted}
-          />
-
-        </Pressable>
-
-
-        {/* SCHOOL / COMPANY */}
-
-        <Pressable
-          style={styles.card}
-          onPress={() =>
-            router.push(
-              "/corporate-account"
-            )
-          }
-        >
-
-          <View
-            style={styles.iconCircle}
+          <Text
+            style={styles.cardText}
           >
-
-            <Ionicons
-              name="business-outline"
-              size={32}
-              color={COLORS.brand}
-            />
-
-          </View>
-
-
-          <View
-            style={styles.cardContent}
-          >
-
-            <Text
-              style={styles.cardTitle}
-            >
-              School / Company
-            </Text>
-
-            <Text
-              style={styles.cardText}
-            >
-              Manage flats and make
-              corporate maintenance payments.
-            </Text>
-
-          </View>
-
-
-          <Ionicons
-            name="chevron-forward"
-            size={24}
-            color={COLORS.muted}
-          />
+            Register your canteen
+            account and submit your
+            details for approval.
+          </Text>
 
         </Pressable>
 
 
         <Pressable
-          style={styles.back}
+          style={styles.backButton}
           onPress={() =>
             router.back()
           }
@@ -292,6 +221,7 @@ const styles =
     headerContent: {
       alignItems:
         "center",
+
       paddingTop:
         SPACING.xxl,
     },
@@ -300,22 +230,25 @@ const styles =
     title: {
       color:
         COLORS.brand,
+
       fontSize:
         30,
+
       fontFamily:
         FONTS.serif,
+
       marginTop:
         SPACING.lg,
-      textAlign:
-        "center",
     },
 
 
     subtitle: {
       color:
         COLORS.muted,
+
       marginTop:
         6,
+
       fontFamily:
         FONTS.sans,
     },
@@ -324,18 +257,13 @@ const styles =
     body: {
       padding:
         SPACING.xl,
+
       marginTop:
         -18,
     },
 
 
     card: {
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
       backgroundColor:
         COLORS.surfaceSecondary,
 
@@ -349,22 +277,25 @@ const styles =
         COLORS.border,
 
       padding:
-        SPACING.lg,
+        SPACING.xl,
 
       marginBottom:
-        SPACING.lg,
+        SPACING.xl,
+
+      alignItems:
+        "center",
     },
 
 
     iconCircle: {
       width:
-        62,
+        72,
 
       height:
-        62,
+        72,
 
       borderRadius:
-        31,
+        36,
 
       justifyContent:
         "center",
@@ -383,27 +314,18 @@ const styles =
     },
 
 
-    cardContent: {
-      flex:
-        1,
-
-      marginLeft:
-        SPACING.lg,
-
-      marginRight:
-        SPACING.md,
-    },
-
-
     cardTitle: {
       color:
         COLORS.onSurface,
 
       fontSize:
-        21,
+        24,
 
       fontFamily:
         FONTS.serif,
+
+      marginTop:
+        18,
     },
 
 
@@ -411,18 +333,21 @@ const styles =
       color:
         COLORS.muted,
 
+      textAlign:
+        "center",
+
       marginTop:
-        5,
+        10,
 
       lineHeight:
-        20,
+        22,
 
       fontFamily:
         FONTS.sans,
     },
 
 
-    back: {
+    backButton: {
       alignItems:
         "center",
 

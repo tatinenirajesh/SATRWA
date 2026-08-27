@@ -6,7 +6,12 @@ export type UserRole =
   | "OWNER"
   | "TENANT"
   | "CORPORATE"
-  | "ADMIN";
+  | "ADMIN"
+  | "COMMERCIAL";
+
+export type CommercialAccountType =
+  | "CANTEEN"
+  | "SUPERMARKET";
 
 export type Session = {
 
@@ -14,19 +19,31 @@ export type Session = {
 
   role: UserRole;
 
-  block: string;
+  /*
+    Resident fields
+  */
 
-  flat_no: string;
+  block?: string;
 
-  bhk_type: "2BHK" | "3BHK";
+  flat_no?: string;
+
+  bhk_type?: "2BHK" | "3BHK";
 
   owner_name?: string;
 
   tenant_name?: string;
 
+  /*
+    Common fields
+  */
+
   phone?: string;
 
   email: string;
+
+  /*
+    Corporate fields
+  */
 
   corporate_covered?: boolean;
 
@@ -36,22 +53,37 @@ export type Session = {
 
   last_login?: string;
 
+  name?: string;
+
+  /*
+    Commercial fields
+  */
+
+  account_type?: CommercialAccountType;
+
+  shop_name?: string;
+
 };
 
-export async function saveSession(session: Session) {
+export async function saveSession(
+  session: Session
+) {
 
   await AsyncStorage.setItem(
     KEY,
-    JSON.stringify(session),
+    JSON.stringify(session)
   );
 
 }
 
 export async function getSession(): Promise<Session | null> {
 
-  const value = await AsyncStorage.getItem(KEY);
+  const value =
+    await AsyncStorage.getItem(KEY);
 
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   return JSON.parse(value);
 

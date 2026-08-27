@@ -4,27 +4,55 @@ import smtplib
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Always load .env
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+
+# Load backend/.env
+env_path = Path(__file__).resolve().parent / ".env"
+
+load_dotenv(
+    dotenv_path=env_path,
+    override=True
+)
+
+
 SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_PORT = int(
+    os.getenv("SMTP_PORT", "587")
+)
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
+
 print("=" * 50)
 print("EMAIL SERVICE LOADED")
+print("ENV PATH :", env_path)
 print("SMTP_SERVER :", SMTP_SERVER)
-print("SMTP_EMAIL  :", SMTP_EMAIL)
+print("SMTP_PORT :", SMTP_PORT)
+print("SMTP_EMAIL :", SMTP_EMAIL)
 print("ADMIN_EMAIL :", ADMIN_EMAIL)
 print("=" * 50)
 
+
 def send_email(to_email, subject, body):
-        
+
+    if not SMTP_SERVER:
+        raise Exception(
+            "SMTP_SERVER is not configured."
+        )
+
+    if not SMTP_EMAIL:
+        raise Exception(
+            "SMTP_EMAIL is not configured."
+        )
+
+    if not SMTP_PASSWORD:
+        raise Exception(
+            "SMTP_PASSWORD is not configured."
+        )
+
     print("SENDING EMAIL TO:", to_email)
     print("SUBJECT:", subject)
 
@@ -34,18 +62,32 @@ def send_email(to_email, subject, body):
     msg["To"] = to_email
     msg["Subject"] = subject
 
-    msg.attach(MIMEText(body, "plain"))
+    msg.attach(
+        MIMEText(body, "plain")
+    )
 
-    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+    with smtplib.SMTP(
+        SMTP_SERVER,
+        SMTP_PORT,
+        timeout=30
+    ) as server:
 
-    server.starttls()
+        server.ehlo()
 
-    server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        server.starttls()
 
-    server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        server.ehlo()
 
-    server.quit()
+        server.login(
+            SMTP_EMAIL,
+            SMTP_PASSWORD
+        )
 
+        server.sendmail(
+            SMTP_EMAIL,
+            to_email,
+            msg.as_string()
+        )
 
 def send_otp(email, otp):
 

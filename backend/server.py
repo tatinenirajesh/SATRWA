@@ -51,21 +51,28 @@ from dotenv import load_dotenv
 import os
 
 env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
-load_dotenv(env_path)
+
+load_result = load_dotenv(env_path)
 
 print("=" * 60)
 print("ENV PATH :", env_path)
 print("FILE EXISTS :", env_path.exists())
-print("LOAD RESULT :", load_dotenv(env_path))
+print("LOAD RESULT :", load_result)
 print("MONGO_URL :", os.getenv("MONGO_URL"))
+print("SMTP_SERVER :", os.getenv("SMTP_SERVER"))
+print("SMTP_EMAIL :", os.getenv("SMTP_EMAIL"))
+print("ADMIN_EMAIL :", os.getenv("ADMIN_EMAIL"))
 print("=" * 60)
 
 mongo_url = os.getenv("MONGO_URL")
 
 if not mongo_url:
-    raise Exception(f"MONGO_URL not found in {env_path}")
+    raise Exception(
+        f"MONGO_URL not found in {env_path}"
+    )
 
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ["DB_NAME"]]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 accounts = db.accounts
@@ -102,6 +109,7 @@ commercial_payments = db.commercial_payments
 meter_readings = db.meter_readings
 audit_logs = db.audit_logs
 settings = db.settings
+commercial_bills = db.commercial_bills
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -209,6 +217,22 @@ class ResetPin(BaseModel):
     new_pin: str
     confirm_pin: str
 
+class CommercialRequestPinReset(
+    BaseModel
+):
+
+    email: str
+
+
+class CommercialResetPin(
+    BaseModel
+):
+
+    email: str
+    otp: str
+    new_pin: str
+    confirm_pin: str
+
 class ComplaintRequest(BaseModel):
     block: str
     flat_no: str
@@ -261,9 +285,33 @@ class MeterReadingEntry(BaseModel):
     email: str
     reading: float
 
+
+class InitialMeterReadingUpdate(BaseModel):
+    email: str
+    reading: float
+
 class CommercialRentUpdate(BaseModel):
     email: str
     monthly_rent: float
+
+class CommercialMiscChargeUpdate(BaseModel):
+
+    email: str
+
+    amount: float = 0
+
+    description: str = ""
+
+
+class CommercialBillPayment(BaseModel):
+
+    email: str
+
+    amount: float
+
+    payment_mode: str = "ONLINE"
+
+    transaction_ref: str = ""
 
 class CommercialLogin(BaseModel):
     email: str
@@ -276,6 +324,15 @@ class CommercialRegister(BaseModel):
     phone: str
     email: str
     pin: str
+    otp: str
+
+class CommercialSendOTP(BaseModel):
+    email: str
+
+
+class CommercialVerifyOTP(BaseModel):
+    email: str
+    otp: str
 
 class PaymentStatusResponse(BaseModel):
     payment_type: str
@@ -446,31 +503,92 @@ class TestReset(BaseModel):
     block: Optional[str] = None
     flat_no: Optional[str] = None
 
-class CorporateFlatEntry(BaseModel):
-    block: str
-    flat_no: str
-    bhk_type: Literal["2BHK", "3BHK"] = "2BHK"
+class CorporateSendOTP(BaseModel):
+
+    email: str
+
 
 class CorporateRegister(BaseModel):
+
     name: str
+
+    email: str
+
     pin: str
-    email: Optional[str] = ""
-    flats: List[CorporateFlatEntry] = []
+
+    otp: str
+
 
 class CorporateLogin(BaseModel):
-    name: str
+
+    email: str
+
     pin: str
 
-class CorporatePayEntry(BaseModel):
+
+class CorporateFlatAdd(BaseModel):
+
+    payer_id: str
+
     block: str
+
     flat_no: str
+
+    bhk_type: Literal[
+        "2BHK",
+        "3BHK",
+        "DUPLEX",
+    ] = "2BHK"
+
+
+class CorporateFlatRemove(BaseModel):
+
+    payer_id: str
+
+    block: str
+
+    flat_no: str
+
+
+class CorporateGatePassRequest(BaseModel):
+
+    payer_id: str
+
+    block: str
+
+    flat_no: str
+
+    move_out_date: str
+
+    vehicle_number: str
+
+    reason: str
+
+
+class CorporatePayEntry(BaseModel):
+
+    block: str
+
+    flat_no: str
+
     amount: float
-    purpose: Literal["maintenance", "conveyance"] = "maintenance"
+
+    purpose: Literal[
+        "maintenance",
+        "conveyance",
+    ] = "maintenance"
+
 
 class CorporatePay(BaseModel):
+
     payer_id: str
-    entries: List[CorporatePayEntry]
+
+    entries: List[
+        CorporatePayEntry
+    ]
+
     txn_ref: Optional[str] = ""
+
     upi_id: Optional[str] = ""
 
 class RecoveryRequest(BaseModel):
@@ -677,6 +795,58 @@ def require_txn_ref(ref: Optional[str]):
 def normalize_email(email: Optional[str]) -> str:
     return (email or "").strip().lower()
 
+def commercial_billing_month() -> str:
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    return (
+        f"{now.year:04d}-"
+        f"{now.month:02d}"
+    )
+
+
+async def get_previous_commercial_due(
+    email: str,
+    billing_month: str
+) -> float:
+
+    rows = await commercial_bills.find(
+        {
+            "email": email,
+
+            "billing_month": {
+                "$lt": billing_month
+            },
+
+            "status": {
+                "$ne": "PAID"
+            }
+        },
+        {
+            "_id": 0
+        }
+    ).to_list(
+        1000
+    )
+
+
+    total_due = 0.0
+
+
+    for row in rows:
+
+        total_due += float(
+            row.get(
+                "balance_due",
+                0
+            )
+        )
+
+
+    return total_due
+
 from security import (
     hash_pin,
     verify_pin,
@@ -854,7 +1024,9 @@ async def compute_dues(flat: dict) -> dict:
         if m not in paid_months
     ]
 
-    rate = MAINT_RATES[flat["bhk_type"]]
+    rate = await get_monthly_rate(
+    flat
+    )
 
     late_fee = await get_late_fee()
 
@@ -1229,6 +1401,188 @@ async def reset_pin(req: ResetPin):
     return {
         "success": True,
         "message": "PIN reset successfully."
+    }
+
+@api_router.post(
+    "/commercial/request-pin-reset"
+)
+async def commercial_request_pin_reset(
+    body: CommercialRequestPinReset
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+
+    account = (
+        await commercial_accounts.find_one(
+            {
+                "email":
+                    email
+            },
+            {
+                "_id":
+                    0
+            }
+        )
+    )
+
+
+    if not account:
+
+        raise HTTPException(
+            404,
+            "Commercial account not found."
+        )
+
+
+    otp = generate_otp()
+
+
+    save_otp(
+        email,
+        otp
+    )
+
+
+    try:
+
+        send_otp(
+            email,
+            otp
+        )
+
+    except Exception as ex:
+
+        raise HTTPException(
+            500,
+            f"Unable to send OTP. {ex}"
+        )
+
+
+    return {
+
+        "success":
+            True,
+
+        "message":
+            "OTP sent successfully."
+
+    }
+
+
+@api_router.post(
+    "/commercial/reset-pin"
+)
+async def commercial_reset_pin(
+    body: CommercialResetPin
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+
+    if (
+        body.new_pin !=
+        body.confirm_pin
+    ):
+
+        raise HTTPException(
+            400,
+            "PINs do not match."
+        )
+
+
+    if (
+        len(
+            body.new_pin
+        ) < 4
+    ):
+
+        raise HTTPException(
+            400,
+            "PIN must contain at least 4 digits."
+        )
+
+
+    account = (
+        await commercial_accounts.find_one(
+            {
+                "email":
+                    email
+            },
+            {
+                "_id":
+                    0
+            }
+        )
+    )
+
+
+    if not account:
+
+        raise HTTPException(
+            404,
+            "Commercial account not found."
+        )
+
+
+    if not verify_otp(
+        email,
+        body.otp
+    ):
+
+        raise HTTPException(
+            400,
+            "Invalid or expired OTP."
+        )
+
+
+    await commercial_accounts.update_one(
+
+        {
+            "id":
+                account["id"]
+        },
+
+        {
+            "$set": {
+
+                "pin_hash":
+                    hash_pin(
+                        body.new_pin
+                    ),
+
+                "failed_attempts":
+                    0,
+
+                "locked_until":
+                    None,
+
+            },
+
+            "$unset": {
+
+                "pin":
+                    ""
+
+            }
+
+        }
+
+    )
+
+
+    return {
+
+        "success":
+            True,
+
+        "message":
+            "PIN reset successfully."
+
     }
 
 @app.get("/admin/pending-registrations")
@@ -2196,155 +2550,956 @@ async def delete_flat(body: FlatDelete):
         "deleted_bookings": r2.deleted_count,
     }
 
-# -------- CORPORATE / BULK PAYER --------
-async def get_corporate(name: str) -> Optional[dict]:
-    return await db.corporate_payers.find_one({"name": name}, {"_id": 0})
+# -------- CORPORATE / SCHOOL / COMPANY --------
 
-@api_router.post("/corporate/register")
-async def corporate_register(body: CorporateRegister):
-    existing = await get_corporate(body.name)
-    if existing:
-        raise HTTPException(400, "Corporate payer already registered. Please login.")
-    if not body.pin or len(body.pin) < 4:
-        raise HTTPException(400, "PIN must be at least 4 digits")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "name": body.name,
-        "pin": body.pin,
-        "email": normalize_email(body.email),
-        "flats": [{"block": f.block.upper(), "flat_no": str(f.flat_no)} for f in body.flats],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.corporate_payers.insert_one(doc.copy())
-    # Independent of individual registration — auto-create/tag each covered flat now.
-    for f in body.flats:
-        await get_or_create_corporate_flat(f.block, f.flat_no, f.bhk_type, doc)
-    doc.pop("_id", None)
-    doc.pop("pin", None)
-    return {"payer": doc}
 
-@api_router.post("/corporate/login")
-async def corporate_login(body: CorporateLogin):
-    payer = await get_corporate(body.name)
-    if not payer or payer.get("pin") != body.pin:
-        raise HTTPException(401, "Invalid name or PIN")
-    payer.pop("pin", None)
-    # These flats always exist now (auto-created on add), so dues are always available.
-    flats_with_dues = []
-    for entry in payer.get("flats", []):
-        flat = await get_flat(entry["block"], entry["flat_no"])
-        if flat:
-            dues = await compute_dues(flat)
-            flats_with_dues.append({"block": flat["block"], "flat_no": flat["flat_no"], "registered": True, "dues": dues})
-        else:
-            flats_with_dues.append({"block": entry["block"], "flat_no": entry["flat_no"], "registered": False, "dues": None})
-    payer["flats"] = flats_with_dues
-    return {"payer": payer}
+async def get_corporate_by_email(
+    email: str
+) -> Optional[dict]:
 
-@api_router.post("/corporate/flats/add")
-async def corporate_add_flat(payer_id: str, block: str, flat_no: str, pin: str, bhk_type: str = "2BHK"):
-    payer = await db.corporate_payers.find_one({"id": payer_id}, {"_id": 0})
-    if not payer or payer.get("pin") != pin:
-        raise HTTPException(401, "Invalid payer or PIN")
-    if bhk_type not in ("2BHK", "3BHK"):
-        bhk_type = "2BHK"
-    flats = payer.get("flats", [])
-    if not any(f["block"] == block.upper() and f["flat_no"] == str(flat_no) for f in flats):
-        flats.append({"block": block.upper(), "flat_no": str(flat_no)})
-        await db.corporate_payers.update_one({"id": payer_id}, {"$set": {"flats": flats}})
-    # Independent of individual registration — this flat now exists and is marked corporate-covered,
-    # regardless of whether any resident has ever logged into the app for it.
-    await get_or_create_corporate_flat(block, flat_no, bhk_type, payer)
-    return {"ok": True, "flats": flats}
-
-@api_router.post("/corporate/pay")
-async def corporate_pay(body: CorporatePay):
-    payer = await db.corporate_payers.find_one({"id": body.payer_id}, {"_id": 0})
-    if not payer:
-        raise HTTPException(404, "Corporate payer not found")
-    if not body.entries:
-        raise HTTPException(400, "No flats/amounts provided")
-    require_txn_ref(body.txn_ref)
-
-    # Validate ALL entries first (stop before any payment if any flat is invalid). Since coverage
-    # is independent of individual registration, a flat "not found" here only means it was never
-    # added via /corporate/flats/add for this payer — not that the resident must register first.
-    covered = {(f["block"], f["flat_no"]) for f in payer.get("flats", [])}
-    validated = []
-    errors = []
-    for e in body.entries:
-        if (e.block.upper(), str(e.flat_no)) not in covered:
-            errors.append(f"{e.block}-{e.flat_no}: not in your covered flats list — add it first")
-            continue
-        flat = await get_flat(e.block, e.flat_no)
-        if not flat:
-            errors.append(f"{e.block}-{e.flat_no}: flat record missing — re-add it to your covered list")
-            continue
-        if e.amount <= 0:
-            errors.append(f"{e.block}-{e.flat_no}: amount must be greater than 0")
-            continue
-        dues = await compute_dues(flat)
-        validated.append({"flat": flat, "dues": dues, "amount": e.amount, "purpose": e.purpose})
-    if errors:
-        raise HTTPException(400, {"message": "Fix the following before payment can proceed", "errors": errors})
-
-    group_id = str(uuid.uuid4())
-    receipts = []
-    for item in validated:
-        flat, dues, amount, purpose = item["flat"], item["dues"], item["amount"], item["purpose"]
-        receipt_no = None
-
-        if purpose == "conveyance":
-            months_to_pay, rate, maint_amt, leftover = [], 0, 0, 0
-            conveyance_amt = amount
-        else:
-            rate = dues["rate"]
-            pending = dues["pending_months"]
-            months_affordable = int(amount // rate) if rate else 0
-            months_to_pay = pending[:months_affordable] if months_affordable > 0 else []
-            leftover = amount - (len(months_to_pay) * rate)
-            maint_amt = len(months_to_pay) * rate
-            conveyance_amt = 0
-
-        doc = {
-            "id": str(uuid.uuid4()),
-            "receipt_no": None,
-            "type": "maintenance" if purpose == "maintenance" else "conveyance",
-            "block": flat["block"],
-            "flat_no": flat["flat_no"],
-            "owner_name": flat.get("owner_name", ""),
-            "phone": flat.get("phone", ""),
-            "bhk_type": flat["bhk_type"],
-            "mode": "corporate",
-            "months_covered": months_to_pay,
-            "months_count": len(months_to_pay),
-            "rate": rate,
-            "maintenance_amount": maint_amt,
-            "conveyance_amount": conveyance_amt,
-            "late_fee_amount": 0,
-            "opening_due_amount": 0,
-            "leftover_credit": leftover,
-            "total_amount": amount,
-            "upi_id": body.upi_id or "",
-            "upi_ref_no": (body.txn_ref or "").strip(),
-            "corporate_payer_id": payer["id"],
-            "corporate_payer_name": payer["name"],
-            "corporate_group_id": group_id,
-            "verified": False,
-            "status": "PENDING_VERIFICATION",
-           "timeline": [
-    {
-        "status": "SUBMITTED",
-        "at": now_iso,
-        "by": "CORPORATE"
-    }
-],
+    return await db.corporate_payers.find_one(
+        {
+            "email":
+                normalize_email(email)
+        },
+        {
+            "_id": 0
         }
-        await db.maintenance_payments.insert_one(doc.copy())
-        doc.pop("_id", None)
-        receipts.append(doc)
+    )
 
-    return {"group_id": group_id, "receipts": receipts, "total_paid": sum(r["total_amount"] for r in receipts)}
+
+async def get_corporate_by_id(
+    payer_id: str
+) -> Optional[dict]:
+
+    return await db.corporate_payers.find_one(
+        {
+            "id": payer_id
+        },
+        {
+            "_id": 0
+        }
+    )
+
+
+@api_router.post(
+    "/corporate/send-otp"
+)
+async def corporate_send_otp(
+    body: CorporateSendOTP
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    if not email:
+
+        raise HTTPException(
+            400,
+            "Email address is required."
+        )
+
+    existing = await get_corporate_by_email(
+        email
+    )
+
+    if existing:
+
+        raise HTTPException(
+            400,
+            "Email is already registered."
+        )
+
+    otp = generate_otp()
+
+    save_otp(
+        email,
+        otp
+    )
+
+    try:
+
+        send_otp(
+            email,
+            otp
+        )
+
+    except Exception as ex:
+
+        raise HTTPException(
+            500,
+            f"Unable to send OTP. {ex}"
+        )
+
+    return {
+
+        "success": True,
+
+        "message":
+            "OTP sent successfully."
+    }
+
+
+@api_router.post(
+    "/corporate/register"
+)
+async def corporate_register(
+    body: CorporateRegister
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    if not body.name.strip():
+
+        raise HTTPException(
+            400,
+            "School or company name is required."
+        )
+
+    if not body.pin:
+
+        raise HTTPException(
+            400,
+            "PIN is required."
+        )
+
+    if len(body.pin) < 4:
+
+        raise HTTPException(
+            400,
+            "PIN must contain at least 4 digits."
+        )
+
+    existing = await get_corporate_by_email(
+        email
+    )
+
+    if existing:
+
+        raise HTTPException(
+            400,
+            "Email is already registered."
+        )
+
+    verified = verify_otp(
+        email,
+        body.otp
+    )
+
+    if not verified:
+
+        raise HTTPException(
+            400,
+            "Invalid or expired OTP."
+        )
+
+    doc = {
+
+        "id":
+            str(uuid.uuid4()),
+
+        "name":
+            body.name.strip(),
+
+        "email":
+            email,
+
+        "pin_hash":
+            hash_pin(
+                body.pin
+            ),
+
+        "failed_attempts":
+            0,
+
+        "locked_until":
+            None,
+
+        "flats":
+            [],
+
+        "created_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+    }
+
+    await db.corporate_payers.insert_one(
+        doc
+    )
+
+    response = doc.copy()
+
+    response.pop(
+        "_id",
+        None
+    )
+
+    response.pop(
+        "pin_hash",
+        None
+    )
+
+    return {
+
+        "success": True,
+
+        "payer":
+            response,
+    }
+
+
+@api_router.post(
+    "/corporate/login"
+)
+async def corporate_login(
+    body: CorporateLogin
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    payer = await get_corporate_by_email(
+        email
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            400,
+            "Invalid email or PIN."
+        )
+
+    locked_until = payer.get(
+        "locked_until"
+    )
+
+    if locked_until:
+
+        unlock_time = (
+            datetime.fromisoformat(
+                locked_until
+            )
+        )
+
+        if (
+            unlock_time >
+            datetime.now(
+                timezone.utc
+            )
+        ):
+
+            raise HTTPException(
+                403,
+                "Account locked. Please reset your PIN or try again later."
+            )
+
+    if not verify_pin(
+        body.pin,
+        payer.get(
+            "pin_hash",
+            ""
+        )
+    ):
+
+        attempts = (
+            payer.get(
+                "failed_attempts",
+                0
+            )
+            + 1
+        )
+
+        update = {
+
+            "failed_attempts":
+                attempts
+        }
+
+        if attempts >= MAX_ATTEMPTS:
+
+            update[
+                "locked_until"
+            ] = (
+                lock_until()
+                .isoformat()
+            )
+
+        await db.corporate_payers.update_one(
+            {
+                "id":
+                    payer["id"]
+            },
+            {
+                "$set":
+                    update
+            }
+        )
+
+        remaining = (
+            MAX_ATTEMPTS -
+            attempts
+        )
+
+        if remaining > 0:
+
+            raise HTTPException(
+                400,
+                f"Invalid PIN. {remaining} attempt(s) remaining."
+            )
+
+        raise HTTPException(
+            403,
+            "Account locked after 3 failed attempts. Use Forgot PIN to reset your PIN."
+        )
+
+    await db.corporate_payers.update_one(
+        {
+            "id":
+                payer["id"]
+        },
+        {
+            "$set": {
+
+                "failed_attempts":
+                    0,
+
+                "locked_until":
+                    None,
+
+                "last_login":
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+            }
+        }
+    )
+
+    payer.pop(
+        "pin_hash",
+        None
+    )
+
+    payer.pop(
+        "pin",
+        None
+    )
+
+    payer.pop(
+        "failed_attempts",
+        None
+    )
+
+    payer.pop(
+        "locked_until",
+        None
+    )
+
+    return {
+
+        "success": True,
+
+        "payer":
+            payer,
+    }
+
+
+@api_router.get(
+    "/corporate/profile"
+)
+async def corporate_profile(
+    payer_id: str
+):
+
+    payer = await get_corporate_by_id(
+        payer_id
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            404,
+            "Corporate account not found."
+        )
+
+    result_flats = []
+
+    for entry in payer.get(
+        "flats",
+        []
+    ):
+
+        flat = await get_flat(
+            entry["block"],
+            entry["flat_no"]
+        )
+
+        if not flat:
+
+            continue
+
+        dues = await compute_dues(
+            flat
+        )
+
+        result_flats.append({
+
+            "block":
+                flat["block"],
+
+            "flat_no":
+                flat["flat_no"],
+
+            "bhk_type":
+                flat.get(
+                    "bhk_type",
+                    "2BHK"
+                ),
+
+            "dues":
+                dues,
+        })
+
+    payer["flats"] = (
+        result_flats
+    )
+
+    payer.pop(
+        "pin_hash",
+        None
+    )
+
+    payer.pop(
+        "pin",
+        None
+    )
+
+    payer.pop(
+        "failed_attempts",
+        None
+    )
+
+    payer.pop(
+        "locked_until",
+        None
+    )
+
+    return {
+
+        "success": True,
+
+        "payer":
+            payer,
+    }
+
+
+@api_router.post(
+    "/corporate/flats/add"
+)
+async def corporate_add_flat(
+    body: CorporateFlatAdd
+):
+
+    payer = await get_corporate_by_id(
+        body.payer_id
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            404,
+            "Corporate account not found."
+        )
+
+    block = (
+        body.block
+        .strip()
+        .upper()
+    )
+
+    flat_no = str(
+        body.flat_no
+    ).strip()
+
+    if not block or not flat_no:
+
+        raise HTTPException(
+            400,
+            "Block and flat number are required."
+        )
+
+    flats = payer.get(
+        "flats",
+        []
+    )
+
+    already_added = any(
+
+        f.get("block") == block
+        and
+        str(
+            f.get("flat_no")
+        ) == flat_no
+
+        for f in flats
+    )
+
+    if already_added:
+
+        raise HTTPException(
+            400,
+            "This flat is already added to your account."
+        )
+
+    flats.append({
+
+        "block":
+            block,
+
+        "flat_no":
+            flat_no,
+    })
+
+    await db.corporate_payers.update_one(
+        {
+            "id":
+                payer["id"]
+        },
+        {
+            "$set": {
+                "flats":
+                    flats
+            }
+        }
+    )
+
+    await get_or_create_corporate_flat(
+        block,
+        flat_no,
+        body.bhk_type,
+        payer
+    )
+
+    return {
+
+        "success": True,
+
+        "flats":
+            flats,
+    }
+
+
+@api_router.post(
+    "/corporate/flats/remove"
+)
+async def corporate_remove_flat(
+    body: CorporateFlatRemove
+):
+
+    payer = await get_corporate_by_id(
+        body.payer_id
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            404,
+            "Corporate account not found."
+        )
+
+    block = (
+        body.block
+        .strip()
+        .upper()
+    )
+
+    flat_no = str(
+        body.flat_no
+    ).strip()
+
+    flats = [
+
+        f
+
+        for f in payer.get(
+            "flats",
+            []
+        )
+
+        if not (
+            f.get("block") == block
+            and
+            str(
+                f.get("flat_no")
+            ) == flat_no
+        )
+    ]
+
+    await db.corporate_payers.update_one(
+        {
+            "id":
+                payer["id"]
+        },
+        {
+            "$set": {
+                "flats":
+                    flats
+            }
+        }
+    )
+
+    flat = await get_flat(
+        block,
+        flat_no
+    )
+
+    if (
+        flat
+        and
+        flat.get(
+            "corporate_payer_id"
+        )
+        == payer["id"]
+    ):
+
+        await db.flats.update_one(
+            {
+                "block":
+                    block,
+
+                "flat_no":
+                    flat_no,
+            },
+            {
+                "$set": {
+
+                    "corporate_covered":
+                        False,
+
+                    "corporate_payer_id":
+                        None,
+
+                    "corporate_payer_name":
+                        None,
+                }
+            }
+        )
+
+    return {
+
+        "success": True,
+
+        "flats":
+            flats,
+    }
+
+
+@api_router.post(
+    "/corporate/request-pin-reset"
+)
+async def corporate_request_pin_reset(
+    body: CorporateSendOTP
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    payer = await get_corporate_by_email(
+        email
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            404,
+            "No corporate account found for this email."
+        )
+
+    otp = generate_otp()
+
+    save_otp(
+        email,
+        otp
+    )
+
+    try:
+
+        send_otp(
+            email,
+            otp
+        )
+
+    except Exception as ex:
+
+        raise HTTPException(
+            500,
+            f"Unable to send OTP. {ex}"
+        )
+
+    return {
+
+        "success": True,
+
+        "message":
+            "OTP sent successfully."
+    }
+
+
+@api_router.post(
+    "/corporate/reset-pin"
+)
+async def corporate_reset_pin(
+    body: CommercialResetPin
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    if (
+        body.new_pin
+        !=
+        body.confirm_pin
+    ):
+
+        raise HTTPException(
+            400,
+            "PINs do not match."
+        )
+
+    if len(
+        body.new_pin
+    ) < 4:
+
+        raise HTTPException(
+            400,
+            "PIN must contain at least 4 digits."
+        )
+
+    payer = await get_corporate_by_email(
+        email
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            404,
+            "Corporate account not found."
+        )
+
+    verified = verify_otp(
+        email,
+        body.otp
+    )
+
+    if not verified:
+
+        raise HTTPException(
+            400,
+            "Invalid or expired OTP."
+        )
+
+    await db.corporate_payers.update_one(
+        {
+            "id":
+                payer["id"]
+        },
+        {
+            "$set": {
+
+                "pin_hash":
+                    hash_pin(
+                        body.new_pin
+                    ),
+
+                "failed_attempts":
+                    0,
+
+                "locked_until":
+                    None,
+            },
+
+            "$unset": {
+
+                "pin":
+                    ""
+            }
+        }
+    )
+
+    return {
+
+        "success": True,
+
+        "message":
+            "PIN reset successfully."
+    }
+
+
+@api_router.post(
+    "/corporate/gate-pass/request"
+)
+async def corporate_gate_pass_request(
+    body: CorporateGatePassRequest
+):
+
+    payer = await get_corporate_by_id(
+        body.payer_id
+    )
+
+    if not payer:
+
+        raise HTTPException(
+            404,
+            "Corporate account not found."
+        )
+
+    block = (
+        body.block
+        .strip()
+        .upper()
+    )
+
+    flat_no = str(
+        body.flat_no
+    ).strip()
+
+    covered = any(
+
+        f.get("block") == block
+        and
+        str(
+            f.get("flat_no")
+        ) == flat_no
+
+        for f in payer.get(
+            "flats",
+            []
+        )
+    )
+
+    if not covered:
+
+        raise HTTPException(
+            403,
+            "This flat is not registered under your account."
+        )
+
+    flat = await get_flat(
+        block,
+        flat_no
+    )
+
+    if not flat:
+
+        raise HTTPException(
+            404,
+            "Flat not found."
+        )
+
+    dues = await compute_dues(
+        flat
+    )
+
+    if dues.get(
+        "total_due",
+        0
+    ) > 0:
+
+        raise HTTPException(
+            400,
+            f"Gate pass cannot be requested. Outstanding due: ₹{dues['total_due']:.2f}"
+        )
+
+    existing = await db.gate_passes.find_one(
+        {
+            "block":
+                block,
+
+            "flat_no":
+                flat_no,
+
+            "status":
+                "PENDING_APPROVAL",
+        }
+    )
+
+    if existing:
+
+        raise HTTPException(
+            400,
+            "A gate pass request is already pending approval for this flat."
+        )
+
+    doc = {
+
+        "id":
+            str(uuid.uuid4()),
+
+        "request_no":
+            "GPR-"
+            + datetime.now().strftime(
+                "%Y%m%d"
+            )
+            + "-"
+            + uuid.uuid4().hex[
+                :5
+            ].upper(),
+
+        "block":
+            block,
+
+        "flat_no":
+            flat_no,
+
+        "move_out_date":
+            body.move_out_date,
+
+        "vehicle_number":
+            body.vehicle_number,
+
+        "reason":
+            body.reason,
+
+        "corporate_payer_id":
+            payer["id"],
+
+        "corporate_payer_name":
+            payer["name"],
+
+        "corporate_email":
+            payer["email"],
+
+        "status":
+            "PENDING_APPROVAL",
+
+        "requested_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+    }
+
+    await db.gate_passes.insert_one(
+        doc
+    )
+
+    doc.pop(
+        "_id",
+        None
+    )
+
+    return {
+
+        "success": True,
+
+        "request":
+            doc,
+    }
 
 # -------- ADMIN --------
 @api_router.post("/admin/verify")
@@ -4375,17 +5530,60 @@ async def commercial_register(body: CommercialRegister):
         raise HTTPException(400, "Email already exists")
 
     doc = {
-        "id": str(uuid.uuid4()),
-        "account_type": body.account_type,
-        "shop_name": body.shop_name,
-        "owner_name": body.owner_name,
-        "phone": body.phone,
-        "email": normalize_email(body.email),
-        "pin": body.pin,
-        "monthly_rent": 0,
-        "electricity_rate": 15,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+
+    "id":
+        str(uuid.uuid4()),
+
+    "account_type":
+        account_type,
+
+    "shop_name":
+        body.shop_name.strip(),
+
+    "owner_name":
+        body.owner_name.strip(),
+
+    "phone":
+        body.phone.strip(),
+
+    "email":
+        email,
+
+    "pin_hash":
+        hash_pin(
+            body.pin
+        ),
+
+    "failed_attempts":
+        0,
+
+    "locked_until":
+        None,
+
+    "monthly_rent":
+        0,
+
+    "miscellaneous_amount":
+        0,
+
+    "miscellaneous_description":
+        "",
+
+    "electricity_rate":
+        0,
+
+    "previous_meter_reading":
+        0,
+
+    "initial_meter_reading":
+        0,
+
+    "created_at":
+        datetime.now(
+            timezone.utc
+        ).isoformat(),
+
+}
 
     await commercial_accounts.insert_one(doc)
 
@@ -4394,20 +5592,157 @@ async def commercial_register(body: CommercialRegister):
     return doc
 
 @api_router.post("/commercial/login")
-async def commercial_login(body: CommercialLogin):
+async def commercial_login(
+    body: CommercialLogin
+):
+
+    email = normalize_email(
+        body.email
+    )
 
     acc = await commercial_accounts.find_one(
         {
-            "email": normalize_email(body.email),
-            "pin": body.pin,
+            "email": email
         },
         {
-            "_id": 0,
-        },
+            "_id": 0
+        }
     )
 
     if not acc:
-        raise HTTPException(401, "Invalid credentials")
+
+        raise HTTPException(
+            400,
+            "Invalid email or PIN."
+        )
+
+
+    locked_until = acc.get(
+        "locked_until"
+    )
+
+    if locked_until:
+
+        unlock_time = datetime.fromisoformat(
+            locked_until
+        )
+
+        if (
+            unlock_time >
+            datetime.now(timezone.utc)
+        ):
+
+            raise HTTPException(
+                403,
+                "Account locked. Please reset your PIN or try again after 15 minutes."
+            )
+
+
+    if not verify_pin(
+        body.pin,
+        acc.get("pin_hash", "")
+    ):
+
+        attempts = (
+            acc.get(
+                "failed_attempts",
+                0
+            )
+            + 1
+        )
+
+        update = {
+            "failed_attempts":
+                attempts
+        }
+
+
+        if attempts >= MAX_ATTEMPTS:
+
+            update[
+                "locked_until"
+            ] = (
+                lock_until()
+                .isoformat()
+            )
+
+
+        await commercial_accounts.update_one(
+            {
+                "id":
+                    acc["id"]
+            },
+            {
+                "$set":
+                    update
+            }
+        )
+
+
+        remaining = (
+            MAX_ATTEMPTS -
+            attempts
+        )
+
+
+        if remaining > 0:
+
+            raise HTTPException(
+                400,
+                f"Invalid PIN. {remaining} attempt(s) remaining."
+            )
+
+
+        raise HTTPException(
+            403,
+            "Account locked after 3 failed attempts. Use Forgot PIN to reset your PIN."
+        )
+
+
+    await commercial_accounts.update_one(
+        {
+            "id":
+                acc["id"]
+        },
+        {
+            "$set": {
+
+                "failed_attempts":
+                    0,
+
+                "locked_until":
+                    None,
+
+                "last_login":
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+
+            }
+        }
+    )
+
+
+    acc.pop(
+        "pin_hash",
+        None
+    )
+
+    acc.pop(
+        "pin",
+        None
+    )
+
+    acc.pop(
+        "failed_attempts",
+        None
+    )
+
+    acc.pop(
+        "locked_until",
+        None
+    )
+
 
     return acc
 
@@ -4429,55 +5764,20 @@ async def update_commercial_rent(body: CommercialRentUpdate):
         "success": True
     }
 
-@api_router.post("/commercial/meter-reading")
-async def commercial_meter_reading(body: MeterReadingEntry):
+@api_router.post(
+    "/admin/commercial/misc-charge"
+)
+async def update_commercial_misc_charge(
+    body: CommercialMiscChargeUpdate
+):
 
-    account = await commercial_accounts.find_one({
-        "email": normalize_email(body.email)
-    })
-
-    if not account:
-        raise HTTPException(404, "Commercial account not found")
-
-    previous = await meter_readings.find_one(
-        {
-            "email": normalize_email(body.email)
-        },
-        sort=[("reading_date", -1)]
+    email = normalize_email(
+        body.email
     )
-
-    previous_reading = previous["reading"] if previous else 0
-
-    units = body.reading - previous_reading
-
-    if units < 0:
-        raise HTTPException(400, "Reading cannot decrease")
-
-    amount = units * account.get("electricity_rate", 15)
-
-    doc = {
-        "id": str(uuid.uuid4()),
-        "email": normalize_email(body.email),
-        "previous_reading": previous_reading,
-        "current_reading": body.reading,
-        "units": units,
-        "rate": account.get("electricity_rate", 15),
-        "amount": amount,
-        "reading_date": datetime.now(timezone.utc).isoformat()
-    }
-
-    await meter_readings.insert_one(doc)
-
-    doc.pop("_id", None)
-
-    return doc
-
-@api_router.get("/commercial/current-bill")
-async def commercial_current_bill(email: str):
 
     account = await commercial_accounts.find_one(
         {
-            "email": normalize_email(email)
+            "email": email
         },
         {
             "_id": 0
@@ -4485,29 +5785,622 @@ async def commercial_current_bill(email: str):
     )
 
     if not account:
-        raise HTTPException(404, "Commercial account not found")
 
-    reading = await meter_readings.find_one(
-        {
-            "email": normalize_email(email)
-        },
-        sort=[("reading_date", -1)]
+        raise HTTPException(
+            404,
+            "Commercial account not found"
+        )
+
+    if body.amount < 0:
+
+        raise HTTPException(
+            400,
+            "Miscellaneous amount cannot be negative"
+        )
+
+    amount = float(
+        body.amount
     )
 
-    electricity = reading["amount"] if reading else 0
+    description = (
+        body.description or ""
+    ).strip()
+
+    # Save the default/current charge on account
+    await commercial_accounts.update_one(
+        {
+            "email": email
+        },
+        {
+            "$set": {
+
+                "miscellaneous_amount":
+                    amount,
+
+                "miscellaneous_description":
+                    description,
+
+            }
+        }
+    )
+
+    # If the current month's bill already exists
+    # and is not paid, update that bill immediately.
+    billing_month = commercial_billing_month()
+
+    existing_bill = await commercial_bills.find_one(
+        {
+            "email": email,
+            "billing_month": billing_month
+        },
+        {
+            "_id": 0
+        }
+    )
+
+    if (
+        existing_bill
+        and existing_bill.get("status") != "PAID"
+    ):
+
+        previous_due = float(
+            existing_bill.get(
+                "previous_due",
+                0
+            )
+        )
+
+        monthly_rent = float(
+            existing_bill.get(
+                "monthly_rent",
+                0
+            )
+        )
+
+        electricity_amount = float(
+            existing_bill.get(
+                "electricity_amount",
+                0
+            )
+        )
+
+        amount_paid = float(
+            existing_bill.get(
+                "amount_paid",
+                0
+            )
+        )
+
+        total_due = (
+            previous_due
+            + monthly_rent
+            + amount
+            + electricity_amount
+        )
+
+        balance_due = max(
+            total_due - amount_paid,
+            0
+        )
+
+        await commercial_bills.update_one(
+            {
+                "email": email,
+                "billing_month": billing_month
+            },
+            {
+                "$set": {
+
+                    "miscellaneous_amount":
+                        amount,
+
+                    "miscellaneous_description":
+                        description,
+
+                    "total_due":
+                        total_due,
+
+                    "balance_due":
+                        balance_due,
+
+                    "status":
+                        "PAID"
+                        if balance_due <= 0
+                        else "PENDING",
+
+                    "updated_at":
+                        datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+
+                }
+            }
+        )
+
+    return {
+        "success": True
+    }
+
+@api_router.post("/admin/commercial/initial-meter-reading")
+async def update_initial_meter_reading(
+    body: InitialMeterReadingUpdate
+):
+
+    email = normalize_email(body.email)
+
+    account = await commercial_accounts.find_one(
+        {
+            "email": email
+        }
+    )
+
+    if not account:
+
+        raise HTTPException(
+            404,
+            "Commercial account not found"
+        )
+
+    if body.reading < 0:
+
+        raise HTTPException(
+            400,
+            "Meter reading cannot be negative"
+        )
+
+    await commercial_accounts.update_one(
+        {
+            "email": email
+        },
+        {
+            "$set": {
+                "previous_meter_reading":
+                    body.reading,
+
+                "initial_meter_reading":
+                    body.reading,
+            }
+        }
+    )
 
     return {
 
-        "shop_name": account["shop_name"],
+        "success": True,
 
-        "account_type": account["account_type"],
+        "previous_meter_reading":
+            body.reading
 
-        "monthly_rent": account["monthly_rent"],
+    }
 
-        "electricity_amount": electricity,
+@api_router.post("/commercial/meter-reading")
+async def commercial_meter_reading(
+    body: MeterReadingEntry
+):
+    email = normalize_email(body.email)
 
-        "total_due": account["monthly_rent"] + electricity
+    account = await commercial_accounts.find_one(
+        {"email": email},
+        {"_id": 0}
+    )
 
+    if not account:
+        raise HTTPException(
+            404,
+            "Commercial account not found"
+        )
+
+    if (account.get("account_type") or "").upper() != "CANTEEN":
+        raise HTTPException(
+            400,
+            "Meter reading is applicable only to CANTEEN accounts"
+        )
+
+    billing_month = commercial_billing_month()
+
+    existing_reading = await meter_readings.find_one(
+        {
+            "email": email,
+            "billing_month": billing_month
+        },
+        {"_id": 0}
+    )
+
+    # Keep the same baseline when the user edits this month's reading.
+    if existing_reading:
+        previous_reading = float(
+            existing_reading.get("previous_reading", 0)
+        )
+    else:
+        previous_reading = float(
+            account.get("previous_meter_reading", 0)
+        )
+
+        # If an earlier monthly reading exists, use its current reading
+        # as the baseline for this new billing month.
+        prior_reading = await meter_readings.find_one(
+            {
+                "email": email,
+                "billing_month": {"$lt": billing_month}
+            },
+            {"_id": 0},
+            sort=[("billing_month", -1)]
+        )
+
+        if prior_reading:
+            previous_reading = float(
+                prior_reading.get("current_reading", previous_reading)
+            )
+
+    current_reading = float(body.reading)
+
+    if current_reading < previous_reading:
+        raise HTTPException(
+            400,
+            "Current meter reading cannot be less than the previous reading"
+        )
+
+    rate = float(
+        account.get("electricity_rate", 0)
+    )
+
+    if rate <= 0:
+        raise HTTPException(
+            400,
+            "Electricity rate has not been set by admin"
+        )
+
+    units = current_reading - previous_reading
+    electricity_amount = units * rate
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    reading_doc = {
+        "id": (
+            existing_reading.get("id")
+            if existing_reading else str(uuid.uuid4())
+        ),
+        "email": email,
+        "billing_month": billing_month,
+        "previous_reading": previous_reading,
+        "current_reading": current_reading,
+        "units": units,
+        "rate": rate,
+        "amount": electricity_amount,
+        "reading_date": now_iso,
+    }
+
+    await meter_readings.update_one(
+        {
+            "email": email,
+            "billing_month": billing_month
+        },
+        {
+            "$set": reading_doc
+        },
+        upsert=True
+    )
+
+    previous_due = await get_previous_commercial_due(
+        email,
+        billing_month
+    )
+
+    monthly_rent = float(
+        account.get("monthly_rent", 0)
+    )
+
+    miscellaneous_amount = float(
+        account.get("miscellaneous_amount", 0)
+    )
+
+    miscellaneous_description = (
+        account.get("miscellaneous_description", "")
+    )
+
+    existing_bill = await commercial_bills.find_one(
+        {
+            "email": email,
+            "billing_month": billing_month
+        },
+        {"_id": 0}
+    )
+
+    amount_paid = float(
+        (existing_bill or {}).get("amount_paid", 0)
+    )
+
+    total_due = (
+        previous_due
+        + monthly_rent
+        + miscellaneous_amount
+        + electricity_amount
+    )
+
+    balance_due = max(total_due - amount_paid, 0)
+
+    bill = {
+        "id": (
+            existing_bill.get("id")
+            if existing_bill else str(uuid.uuid4())
+        ),
+        "email": email,
+        "account_type": "CANTEEN",
+        "shop_name": account.get("shop_name"),
+        "billing_month": billing_month,
+        "previous_due": previous_due,
+        "monthly_rent": monthly_rent,
+        "miscellaneous_amount": miscellaneous_amount,
+        "miscellaneous_description": miscellaneous_description,
+        "previous_reading": previous_reading,
+        "current_reading": current_reading,
+        "electricity_units": units,
+        "electricity_rate": rate,
+        "electricity_amount": electricity_amount,
+        "total_due": total_due,
+        "amount_paid": amount_paid,
+        "balance_due": balance_due,
+        "status": "PAID" if balance_due <= 0 else "PENDING",
+        "updated_at": now_iso,
+    }
+
+    if not existing_bill:
+        bill["created_at"] = now_iso
+
+    await commercial_bills.update_one(
+        {
+            "email": email,
+            "billing_month": billing_month
+        },
+        {
+            "$set": bill
+        },
+        upsert=True
+    )
+
+    return bill
+
+
+@api_router.get("/commercial/current-bill")
+async def commercial_current_bill(
+    email: str
+):
+    normalized_email = normalize_email(email)
+
+    account = await commercial_accounts.find_one(
+        {
+            "email": normalized_email
+        },
+        {
+            "_id": 0
+        }
+    )
+
+    if not account:
+        raise HTTPException(
+            404,
+            "Commercial account not found"
+        )
+
+    account_type = (
+        account.get("account_type") or ""
+    ).upper()
+
+    billing_month = commercial_billing_month()
+
+    existing_bill = await commercial_bills.find_one(
+        {
+            "email": normalized_email,
+            "billing_month": billing_month
+        },
+        {
+            "_id": 0
+        }
+    )
+
+    if existing_bill:
+        return existing_bill
+
+    previous_due = await get_previous_commercial_due(
+        normalized_email,
+        billing_month
+    )
+
+    monthly_rent = float(
+        account.get("monthly_rent", 0)
+    )
+
+    miscellaneous_amount = float(
+        account.get("miscellaneous_amount", 0)
+    )
+
+    miscellaneous_description = (
+        account.get(
+            "miscellaneous_description",
+            ""
+        )
+    )
+
+    previous_reading = float(
+        account.get(
+            "previous_meter_reading",
+            0
+        )
+    )
+
+    current_reading = None
+    electricity_units = 0.0
+    electricity_rate = 0.0
+    electricity_amount = 0.0
+
+    # Electricity logic applies ONLY to CANTEEN
+    if account_type == "CANTEEN":
+
+        current_month_reading = await meter_readings.find_one(
+            {
+                "email": normalized_email,
+                "billing_month": billing_month
+            },
+            {
+                "_id": 0
+            }
+        )
+
+        if current_month_reading:
+
+            previous_reading = float(
+                current_month_reading.get(
+                    "previous_reading",
+                    previous_reading
+                )
+            )
+
+            current_reading = float(
+                current_month_reading.get(
+                    "current_reading",
+                    0
+                )
+            )
+
+            electricity_units = float(
+                current_month_reading.get(
+                    "units",
+                    0
+                )
+            )
+
+            electricity_rate = float(
+                current_month_reading.get(
+                    "rate",
+                    0
+                )
+            )
+
+            electricity_amount = float(
+                current_month_reading.get(
+                    "amount",
+                    0
+                )
+            )
+
+    total_due = (
+        previous_due
+        + monthly_rent
+        + miscellaneous_amount
+        + electricity_amount
+    )
+
+    now_iso = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    bill = {
+        "id": str(uuid.uuid4()),
+
+        "email": normalized_email,
+
+        "account_type": account_type,
+
+        "shop_name": account.get(
+            "shop_name"
+        ),
+
+        "billing_month": billing_month,
+
+        "previous_due": previous_due,
+
+        "monthly_rent": monthly_rent,
+
+        "miscellaneous_amount":
+            miscellaneous_amount,
+
+        "miscellaneous_description":
+            miscellaneous_description,
+
+        "previous_reading":
+            previous_reading,
+
+        "current_reading":
+            current_reading,
+
+        "electricity_units":
+            electricity_units,
+
+        "electricity_rate":
+            electricity_rate,
+
+        "electricity_amount":
+            electricity_amount,
+
+        "total_due":
+            total_due,
+
+        "amount_paid":
+            0.0,
+
+        "balance_due":
+            total_due,
+
+        "status":
+            "PAID"
+            if total_due <= 0
+            else "PENDING",
+
+        "created_at":
+            now_iso,
+
+        "updated_at":
+            now_iso,
+    }
+
+    await commercial_bills.insert_one(
+        bill.copy()
+    )
+
+    bill.pop(
+        "_id",
+        None
+    )
+
+    return bill
+
+@api_router.get("/commercial/payment-history")
+async def commercial_payment_history(
+    email: str
+):
+    normalized_email = normalize_email(email)
+
+    account = await commercial_accounts.find_one(
+        {
+            "email": normalized_email
+        },
+        {
+            "_id": 0
+        }
+    )
+
+    if not account:
+        raise HTTPException(
+            404,
+            "Commercial account not found"
+        )
+
+    rows = await commercial_payments.find(
+        {
+            "email": normalized_email
+        },
+        {
+            "_id": 0
+        }
+    ).sort(
+        "payment_date",
+        -1
+    ).to_list(
+        100
+    )
+
+    return {
+        "success": True,
+        "payments": rows
     }
 
 @api_router.post("/admin/commercial/electricity-rate")
@@ -5590,6 +7483,173 @@ async def debug_payments():
     )
 
     return doc
+
+@api_router.post("/commercial/send-otp")
+async def commercial_send_otp(
+    body: CommercialSendOTP
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    existing = await commercial_accounts.find_one(
+        {
+            "email": email
+        }
+    )
+
+    if existing:
+
+        raise HTTPException(
+            400,
+            "Email already registered."
+        )
+
+    otp = generate_otp()
+
+    save_otp(
+        email,
+        otp
+    )
+
+    try:
+
+        send_otp(
+            email,
+            otp
+        )
+
+    except Exception as ex:
+
+        raise HTTPException(
+            500,
+            f"Unable to send OTP. {ex}"
+        )
+
+    return {
+        "success": True,
+        "message":
+            "OTP sent successfully."
+    }
+
+
+@api_router.post("/commercial/register")
+async def commercial_register(
+    body: CommercialRegister
+):
+
+    email = normalize_email(
+        body.email
+    )
+
+    if await commercial_accounts.find_one(
+        {
+            "email": email
+        }
+    ):
+
+        raise HTTPException(
+            400,
+            "Email already exists"
+        )
+
+    if not body.otp:
+
+        raise HTTPException(
+            400,
+            "OTP verification is required."
+        )
+
+    verified = verify_otp(
+        email,
+        body.otp
+    )
+
+    if not verified:
+
+        raise HTTPException(
+            400,
+            "Invalid or expired OTP."
+        )
+
+    account_type = (
+        body.account_type
+        .strip()
+        .upper()
+    )
+
+    if account_type not in [
+        "CANTEEN",
+        "SUPERMARKET",
+    ]:
+
+        raise HTTPException(
+            400,
+            "Invalid commercial account type."
+        )
+
+    doc = {
+
+        "id":
+            str(uuid.uuid4()),
+
+        "account_type":
+            account_type,
+
+        "shop_name":
+            body.shop_name.strip(),
+
+        "owner_name":
+            body.owner_name.strip(),
+
+        "phone":
+            body.phone.strip(),
+
+        "email":
+            email,
+
+        "pin":
+            body.pin,
+
+        "monthly_rent":
+            0,
+
+        "miscellaneous_amount":
+            0,
+
+        "miscellaneous_description":
+            "",
+
+        "electricity_rate":
+            0,
+
+        "previous_meter_reading":
+            0,
+
+        "initial_meter_reading":
+            0,
+
+        "created_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
+    }
+
+    await commercial_accounts.insert_one(
+        doc
+    )
+
+    doc.pop(
+        "_id",
+        None
+    )
+
+    return {
+        "success": True,
+        "account": doc,
+    }
 
 app.include_router(api_router)
 
