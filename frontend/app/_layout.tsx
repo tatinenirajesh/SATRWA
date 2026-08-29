@@ -28,7 +28,8 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
           <Stack
-            screenOptions={{
+              initialRouteName="welcome"
+              screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: "#0A0A0A" },
               animation: "slide_from_right",

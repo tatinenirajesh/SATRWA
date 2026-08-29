@@ -33,7 +33,6 @@ import {
   commercialSendOTP,
 } from "@/src/services/api";
 
-
 export default function CommercialRegister() {
 
   const {
@@ -365,8 +364,7 @@ export default function CommercialRegister() {
     <SafeAreaView
       style={styles.container}
     >
-
-      <ScrollView
+        <ScrollView
         contentContainerStyle={
           styles.body
         }
