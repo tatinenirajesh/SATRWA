@@ -1,5 +1,4 @@
 import React, {
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -8,7 +7,6 @@ import React, {
 import {
   Animated,
   Image,
-  ImageBackground,
   Pressable,
   StyleSheet,
   Text,
@@ -28,626 +26,358 @@ import {
 } from "expo-router";
 
 import {
+  BrandLogo,
+} from "@/src/components/BrandLogo";
+
+import {
   COLORS,
+  SPACING,
+  RADIUS,
   FONTS,
 } from "@/src/theme";
 
+import {
+  getSession,
+} from "@/src/services/session";
 
-const SLIDES = [
 
-  {
-    image:
-      require(
-        "../assets/images/township-welcome.jpg"
-      ),
+/* =================================
+   INTRO SETTINGS
+================================= */
 
-    title:
-      "Welcome Home",
+const INTRO_DURATION = 4000;
 
-    subtitle:
-      "A COMMUNITY BUILT ON TRUST",
-  },
 
-  {
-    image:
-      require(
-        "../assets/images/township-garden.jpg"
-      ),
+const INTRO_SLIDES = [
+  require(
+    "../assets/images/township-entrance.jpg"
+  ),
 
-    title:
-      "Peace. Harmony.",
+  require(
+    "../assets/images/township-garden.jpg"
+  ),
 
-    subtitle:
-      "TOGETHER WE GROW",
-  },
-
-  {
-    image:
-      require(
-        "../assets/images/township-entrance.jpg"
-      ),
-
-    title:
-      "A Place to Belong",
-
-    subtitle:
-      "A FAMILY BEYOND WALLS",
-  },
-
+  require(
+    "../assets/images/township-welcome.jpg"
+  ),
 ];
 
 
-const AUTO_ADVANCE_TIME =
-  4000;
 
+/* =================================
+   MAIN SCREEN
+================================= */
 
-const FINAL_IDLE_TIME =
-  15000;
-
-
-export default function WelcomeScreen() {
+export default function LandingScreen() {
 
   const [
-    currentSlide,
-    setCurrentSlide,
-  ] =
-    useState(0);
-
-
-  const [
-    showFinal,
-    setShowFinal,
-  ] =
-    useState(false);
-
-
-  const fadeAnim =
-    useRef(
-      new Animated.Value(1)
-    ).current;
-
-
-  const autoTimer =
-    useRef<
-      ReturnType<typeof setTimeout>
-      | null
-    >(null);
-
-
-  const finalTimer =
-    useRef<
-      ReturnType<typeof setTimeout>
-      | null
-    >(null);
-
-
-  const clearTimers =
-    useCallback(
-      () => {
-
-        if (
-          autoTimer.current
-        ) {
-
-          clearTimeout(
-            autoTimer.current
-          );
-
-          autoTimer.current =
-            null;
-
-        }
-
-
-        if (
-          finalTimer.current
-        ) {
-
-          clearTimeout(
-            finalTimer.current
-          );
-
-          finalTimer.current =
-            null;
-
-        }
-
-      },
-      []
-    );
-
-
-  const animateScreen =
-    useCallback(
-      (
-        callback: () => void
-      ) => {
-
-        Animated.timing(
-          fadeAnim,
-          {
-            toValue:
-              0,
-
-            duration:
-              250,
-
-            useNativeDriver:
-              true,
-          }
-        ).start(
-          () => {
-
-            callback();
-
-
-            Animated.timing(
-              fadeAnim,
-              {
-                toValue:
-                  1,
-
-                duration:
-                  500,
-
-                useNativeDriver:
-                  true,
-              }
-            ).start();
-
-          }
-        );
-
-      },
-      [
-        fadeAnim,
-      ]
-    );
-
-
-  const goToNextSlide =
-    useCallback(
-      () => {
-
-        clearTimers();
-
-
-        if (
-          showFinal
-        ) {
-
-          return;
-
-        }
-
-
-        if (
-          currentSlide <
-          SLIDES.length - 1
-        ) {
-
-          animateScreen(
-            () => {
-
-              setCurrentSlide(
-                previous =>
-                  previous + 1
-              );
-
-            }
-          );
-
-        } else {
-
-          animateScreen(
-            () => {
-
-              setShowFinal(
-                true
-              );
-
-            }
-          );
-
-        }
-
-      },
-      [
-        animateScreen,
-        clearTimers,
-        currentSlide,
-        showFinal,
-      ]
-    );
-
-
-  useEffect(
-    () => {
-
-      clearTimers();
-
-
-      if (
-        showFinal
-      ) {
-
-        finalTimer.current =
-          setTimeout(
-            () => {
-
-              animateScreen(
-                () => {
-
-                  setCurrentSlide(
-                    0
-                  );
-
-                  setShowFinal(
-                    false
-                  );
-
-                }
-              );
-
-            },
-            FINAL_IDLE_TIME
-          );
-
-
-        return;
-
-      }
-
-
-      autoTimer.current =
-        setTimeout(
-          () => {
-
-            goToNextSlide();
-
-          },
-          AUTO_ADVANCE_TIME
-        );
-
-
-      return () => {
-
-        clearTimers();
-
-      };
-
-    },
-    [
-      currentSlide,
-      showFinal,
-      goToNextSlide,
-      clearTimers,
-      animateScreen,
-    ]
-  );
-
-
-  useEffect(
-    () => {
-
-      return () => {
-
-        clearTimers();
-
-      };
-
-    },
-    [
-      clearTimers,
-    ]
-  );
-
-
-  function enterApplication() {
-
-    clearTimers();
-
-
-    router.replace(
-      "/"
-    );
-
-  }
+    showIntro,
+    setShowIntro,
+  ] = useState(true);
 
 
   if (
-    showFinal
+    showIntro
   ) {
 
     return (
 
-      <View
-        style={
-          styles.finalContainer
+      <TownshipIntro
+        onFinish={() =>
+          setShowIntro(false)
         }
-      >
-
-        <LinearGradient
-          colors={[
-            "#151207",
-            "#0A0A0A",
-            "#000000",
-          ]}
-          style={
-            styles.finalGradient
-          }
-        >
-
-          <SafeAreaView
-            style={
-              styles.safeArea
-            }
-          >
-
-            <Animated.View
-              style={[
-                styles.finalContent,
-                {
-                  opacity:
-                    fadeAnim,
-                },
-              ]}
-            >
-
-              <Image
-                source={
-                  require(
-                    "../assets/images/splash-logo.png"
-                  )
-                }
-                style={
-                  styles.finalLogo
-                }
-                resizeMode="contain"
-              />
-
-
-              <Text
-                style={
-                  styles.finalTitle
-                }
-              >
-                SRI ANJANEYA
-              </Text>
-
-
-              <Text
-                style={
-                  styles.finalTownship
-                }
-              >
-                TOWNSHIP
-              </Text>
-
-
-              <View
-                style={
-                  styles.goldLine
-                }
-              />
-
-
-              <Text
-                style={
-                  styles.finalWelcome
-                }
-              >
-                Welcome Home
-              </Text>
-
-
-              <Text
-                style={
-                  styles.finalSubtitle
-                }
-              >
-                A COMMUNITY BUILT ON TRUST
-              </Text>
-
-
-              <Pressable
-                onPress={
-                  enterApplication
-                }
-                style={
-                  styles.enterButton
-                }
-              >
-
-                <Text
-                  style={
-                    styles.enterButtonText
-                  }
-                >
-                  WELCOME HOME →
-                </Text>
-
-              </Pressable>
-
-
-              <Text
-                style={
-                  styles.finalHint
-                }
-              >
-                Tap to enter your community
-              </Text>
-
-            </Animated.View>
-
-          </SafeAreaView>
-
-        </LinearGradient>
-
-      </View>
+      />
 
     );
 
   }
 
 
-  const slide =
-    SLIDES[
-      currentSlide
-    ];
+  return (
+
+    <WelcomeScreen />
+
+  );
+
+}
+
+
+
+/* =================================
+   TOWNSHIP INTRO
+================================= */
+
+function TownshipIntro({
+  onFinish,
+}: {
+  onFinish: () => void;
+}) {
+
+  const [
+    currentSlide,
+    setCurrentSlide,
+  ] = useState(0);
+
+
+  const progress =
+    useRef(
+      new Animated.Value(0)
+    ).current;
+
+
+  useEffect(() => {
+
+    progress.setValue(0);
+
+
+    const animation =
+      Animated.timing(
+        progress,
+        {
+          toValue: 1,
+
+          duration:
+            INTRO_DURATION,
+
+          useNativeDriver:
+            false,
+        }
+      );
+
+
+    animation.start(
+      ({
+        finished,
+      }) => {
+
+        if (
+          finished
+        ) {
+
+          goToNextSlide();
+
+        }
+
+      }
+    );
+
+
+    return () => {
+
+      animation.stop();
+
+    };
+
+  }, [
+    currentSlide,
+  ]);
+
+
+  function goToNextSlide() {
+
+    if (
+      currentSlide <
+      INTRO_SLIDES.length - 1
+    ) {
+
+      setCurrentSlide(
+        previous =>
+          previous + 1
+      );
+
+    } else {
+
+      onFinish();
+
+    }
+
+  }
 
 
   return (
 
     <Pressable
       style={
-        styles.container
+        styles.introContainer
       }
       onPress={
         goToNextSlide
       }
     >
 
-      <ImageBackground
+      <Image
         source={
-          slide.image
+          INTRO_SLIDES[
+            currentSlide
+          ]
         }
         style={
-          styles.container
+          styles.introImage
         }
         resizeMode="cover"
+      />
+
+
+      {/* DARK OVERLAY */}
+
+      <LinearGradient
+        colors={[
+          "rgba(0,0,0,0.10)",
+          "rgba(0,0,0,0.25)",
+          "rgba(0,0,0,0.80)",
+        ]}
+        style={
+          styles.introOverlay
+        }
+      />
+
+
+      {/* BRAND LOGO */}
+
+      <SafeAreaView
+        style={
+          styles.introContent
+        }
       >
 
-        <LinearGradient
-          colors={[
-            "rgba(0,0,0,0.10)",
-            "rgba(0,0,0,0.20)",
-            "rgba(0,0,0,0.88)",
-            "#0A0A0A",
-          ]}
+        <Image
+          source={
+            require(
+              "../assets/images/splash-logo.png"
+            )
+          }
           style={
-            styles.overlay
+            styles.splashLogo
+          }
+          resizeMode="contain"
+        />
+
+
+        <View
+          style={
+            styles.introBottom
           }
         >
 
-          <SafeAreaView
+          <Text
             style={
-              styles.safeArea
+              styles.tapText
+            }
+          >
+            Tap to continue
+          </Text>
+
+
+          {/* PROGRESS BARS */}
+
+          <View
+            style={
+              styles.progressContainer
             }
           >
 
-            <Animated.View
-              style={[
-                styles.slideContent,
-                {
-                  opacity:
-                    fadeAnim,
-                },
-              ]}
-            >
+            {
+              INTRO_SLIDES.map(
+                (
+                  _,
+                  index
+                ) => {
 
-              <View
-                style={
-                  styles.topSection
-                }
-              >
-
-                <Image
-                  source={
-                    require(
-                      "../assets/images/splash-logo.png"
-                    )
-                  }
-                  style={
-                    styles.smallLogo
-                  }
-                  resizeMode="contain"
-                />
-
-              </View>
+                  const isCompleted =
+                    index <
+                    currentSlide;
 
 
-              <View
-                style={
-                  styles.bottomSection
-                }
-              >
-
-                <Text
-                  style={
-                    styles.slideTitle
-                  }
-                >
-                  {
-                    slide.title
-                  }
-                </Text>
+                  const isCurrent =
+                    index ===
+                    currentSlide;
 
 
-                <Text
-                  style={
-                    styles.slideSubtitle
-                  }
-                >
-                  {
-                    slide.subtitle
-                  }
-                </Text>
+                  return (
 
-
-                <View
-                  style={
-                    styles.progressContainer
-                  }
-                >
-
-                  {
-                    SLIDES.map(
-                      (
-                        _,
+                    <View
+                      key={
                         index
-                      ) => (
+                      }
+                      style={
+                        styles.progressTrack
+                      }
+                    >
 
-                        <View
-                          key={
-                            index
-                          }
-                          style={[
-                            styles.progressBar,
+                      {
+                        isCompleted && (
 
-                            index <=
-                            currentSlide
-                              ?
-                              styles.progressActive
-                              :
-                              styles.progressInactive,
-                          ]}
-                        />
+                          <View
+                            style={
+                              styles.progressComplete
+                            }
+                          />
 
-                      )
-                    )
-                  }
-
-                </View>
+                        )
+                      }
 
 
-                <Text
-                  style={
-                    styles.tapHint
-                  }
-                >
-                  Tap anywhere to continue
-                </Text>
+                      {
+                        isCurrent && (
 
-              </View>
+                          <Animated.View
+                            style={[
+                              styles.progressActive,
 
-            </Animated.View>
+                              {
+                                width:
+                                  progress.interpolate(
+                                    {
+                                      inputRange:
+                                        [
+                                          0,
+                                          1,
+                                        ],
 
-          </SafeAreaView>
+                                      outputRange:
+                                        [
+                                          "0%",
+                                          "100%",
+                                        ],
+                                    }
+                                  ),
+                              },
 
-        </LinearGradient>
+                            ]}
+                          />
 
-      </ImageBackground>
+                        )
+                      }
+
+                    </View>
+
+                  );
+
+                }
+              )
+            }
+
+          </View>
+
+
+          <Text
+            style={
+              styles.slideText
+            }
+          >
+            {
+              currentSlide +
+              1
+            }
+            {" / "}
+            {
+              INTRO_SLIDES.length
+            }
+          </Text>
+
+        </View>
+
+      </SafeAreaView>
 
     </Pressable>
 
@@ -656,76 +386,493 @@ export default function WelcomeScreen() {
 }
 
 
+
+/* =================================
+   EXISTING WELCOME SCREEN
+================================= */
+
+function WelcomeScreen() {
+
+  const timer =
+    useRef<
+      ReturnType<
+        typeof setTimeout
+      > | null
+    >(
+      null
+    );
+
+
+  useEffect(() => {
+
+    let isMounted =
+      true;
+
+
+    async function loadSession() {
+
+      try {
+
+        const session =
+          await getSession();
+
+
+        if (
+          !isMounted ||
+          !session
+        ) {
+
+          return;
+
+        }
+
+
+        /* ==============================
+           RESIDENT
+        ============================== */
+
+        if (
+          session.role ===
+            "OWNER" ||
+          session.role ===
+            "TENANT"
+        ) {
+
+          router.replace(
+            "/resident-home"
+          );
+
+          return;
+
+        }
+
+
+        /* ==============================
+           COMMERCIAL
+        ============================== */
+
+        if (
+          session.role ===
+          "COMMERCIAL"
+        ) {
+
+          if (
+            session.account_type ===
+            "CANTEEN"
+          ) {
+
+            router.replace(
+              "/commercial-canteen-dashboard"
+            );
+
+            return;
+
+          }
+
+
+          if (
+            session.account_type ===
+            "SUPERMARKET"
+          ) {
+
+            router.push({
+              pathname:
+                "/commercial-signin",
+
+              params: {
+                type:
+                  "SUPERMARKET",
+              },
+            });
+
+            return;
+
+          }
+
+        }
+
+
+        /* ==============================
+           CORPORATE
+        ============================== */
+
+        if (
+          session.role ===
+          "CORPORATE"
+        ) {
+
+          router.replace(
+            "/corporate-account"
+          );
+
+          return;
+
+        }
+
+
+        /* ==============================
+           ADMIN
+        ============================== */
+
+        if (
+          session.role ===
+          "ADMIN"
+        ) {
+
+          router.replace(
+            "/admin"
+          );
+
+          return;
+
+        }
+
+      } catch (
+        error
+      ) {
+
+        console.log(
+          "SESSION LOAD ERROR:",
+          error
+        );
+
+      }
+
+    }
+
+
+    loadSession();
+
+
+    return () => {
+
+      isMounted =
+        false;
+
+
+      if (
+        timer.current
+      ) {
+
+        clearTimeout(
+          timer.current
+        );
+
+      }
+
+    };
+
+  }, []);
+
+
+  function startAdminTimer() {
+
+    if (
+      timer.current
+    ) {
+
+      clearTimeout(
+        timer.current
+      );
+
+    }
+
+
+    timer.current =
+      setTimeout(
+        () => {
+
+          router.push(
+            "/admin"
+          );
+
+        },
+        5000
+      );
+
+  }
+
+
+  function stopAdminTimer() {
+
+    if (
+      timer.current
+    ) {
+
+      clearTimeout(
+        timer.current
+      );
+
+      timer.current =
+        null;
+
+    }
+
+  }
+
+
+  return (
+
+    <View
+      style={
+        styles.container
+      }
+    >
+
+      <LinearGradient
+        colors={[
+          "#1a1508",
+          "#0A0A0A",
+        ]}
+        style={
+          styles.header
+        }
+      >
+
+        <SafeAreaView>
+
+          <Pressable
+            onPressIn={
+              startAdminTimer
+            }
+            onPressOut={
+              stopAdminTimer
+            }
+            style={
+              styles.logoArea
+            }
+          >
+
+            <BrandLogo
+              size={96}
+            />
+
+
+            <Text
+              style={
+                styles.title
+              }
+            >
+              SATRWA
+            </Text>
+
+
+            <Text
+              style={
+                styles.subtitle
+              }
+            >
+              Sri Anjaneya Township
+            </Text>
+
+          </Pressable>
+
+        </SafeAreaView>
+
+      </LinearGradient>
+
+
+      <View
+        style={
+          styles.body
+        }
+      >
+
+        <Text
+          style={
+            styles.welcome
+          }
+        >
+          Welcome Home
+        </Text>
+
+
+        {/* INDIVIDUAL */}
+
+        <Pressable
+          style={
+            styles.card
+          }
+          onPress={() =>
+            router.push(
+              "/individual"
+            )
+          }
+        >
+
+          <Text
+            style={
+              styles.cardIcon
+            }
+          >
+            🏠
+          </Text>
+
+
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
+            Individual
+          </Text>
+
+
+          <Text
+            style={
+              styles.cardSub
+            }
+          >
+            Owners & Tenants
+          </Text>
+
+        </Pressable>
+
+
+        {/* CORPORATE */}
+
+        <Pressable
+          style={
+            styles.card
+          }
+          onPress={() =>
+            router.push(
+              "/corporate"
+            )
+          }
+        >
+
+          <Text
+            style={
+              styles.cardIcon
+            }
+          >
+            🏢
+          </Text>
+
+
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
+            Corporate
+          </Text>
+
+
+          <Text
+            style={
+              styles.cardSub
+            }
+          >
+            Schools, Companies & Commercial
+          </Text>
+
+        </Pressable>
+
+
+        <Text
+          style={
+            styles.version
+          }
+        >
+          Version 1.0.0
+        </Text>
+
+      </View>
+
+    </View>
+
+  );
+
+}
+
+
+
+/* =================================
+   STYLES
+================================= */
+
 const styles =
   StyleSheet.create({
 
-    container: {
+    /* INTRO */
 
-      flex:
-        1,
+    introContainer: {
+
+      flex: 1,
 
       backgroundColor:
-        "#0A0A0A",
+        "#000000",
 
     },
 
 
-    overlay: {
+    introImage: {
 
-      flex:
-        1,
+      position:
+        "absolute",
 
-    },
+      width:
+        "100%",
 
-
-    safeArea: {
-
-      flex:
-        1,
+      height:
+        "100%",
 
     },
 
 
-    slideContent: {
+    introOverlay: {
 
-      flex:
-        1,
+      position:
+        "absolute",
+
+      width:
+        "100%",
+
+      height:
+        "100%",
+
+    },
+
+
+    introContent: {
+
+      flex: 1,
 
       justifyContent:
         "space-between",
 
-    },
-
-
-    topSection: {
-
       alignItems:
         "center",
 
-      paddingTop:
-        10,
-
     },
 
 
-    smallLogo: {
+    splashLogo: {
 
       width:
-        110,
+        180,
 
       height:
-        110,
+        180,
+
+      marginTop:
+        20,
 
     },
 
 
-    bottomSection: {
+    introBottom: {
+
+      width:
+        "100%",
 
       paddingHorizontal:
-        28,
+        24,
 
       paddingBottom:
-        38,
+        30,
 
       alignItems:
         "center",
@@ -733,42 +880,16 @@ const styles =
     },
 
 
-    slideTitle: {
-
-      fontFamily:
-        FONTS.serif,
-
-      fontSize:
-        34,
+    tapText: {
 
       color:
-        COLORS.brand,
+        "rgba(255,255,255,0.85)",
 
-      textAlign:
-        "center",
+      fontSize:
+        14,
 
       marginBottom:
-        10,
-
-    },
-
-
-    slideSubtitle: {
-
-      fontFamily:
-        FONTS.sans,
-
-      fontSize:
-        12,
-
-      letterSpacing:
-        2,
-
-      color:
-        "#E5D2A0",
-
-      textAlign:
-        "center",
+        14,
 
     },
 
@@ -781,196 +902,238 @@ const styles =
       width:
         "100%",
 
-      marginTop:
-        30,
-
       gap:
         6,
 
     },
 
 
-    progressBar: {
+    progressTrack: {
 
-      flex:
-        1,
+      flex: 1,
 
       height:
-        3,
+        4,
+
+      backgroundColor:
+        "rgba(255,255,255,0.30)",
 
       borderRadius:
         10,
+
+      overflow:
+        "hidden",
+
+    },
+
+
+    progressComplete: {
+
+      width:
+        "100%",
+
+      height:
+        "100%",
+
+      backgroundColor:
+        "#D4AF37",
 
     },
 
 
     progressActive: {
 
+      height:
+        "100%",
+
       backgroundColor:
-        COLORS.brand,
+        "#D4AF37",
 
     },
 
 
-    progressInactive: {
-
-      backgroundColor:
-        "rgba(255,255,255,0.25)",
-
-    },
-
-
-    tapHint: {
-
-      marginTop:
-        18,
+    slideText: {
 
       color:
-        "#BDBDBD",
+        "rgba(255,255,255,0.70)",
+
+      marginTop:
+        12,
 
       fontSize:
         12,
 
-      fontFamily:
-        FONTS.sans,
-
     },
 
 
-    finalContainer: {
+    /* WELCOME SCREEN */
 
-      flex:
-        1,
+    container: {
+
+      flex: 1,
 
       backgroundColor:
-        "#0A0A0A",
+        COLORS.surface,
 
     },
 
 
-    finalGradient: {
+    header: {
 
-      flex:
-        1,
+      paddingBottom:
+        SPACING.xxxl,
 
     },
 
 
-    finalContent: {
-
-      flex:
-        1,
-
-      justifyContent:
-        "center",
+    logoArea: {
 
       alignItems:
         "center",
 
-      paddingHorizontal:
-        30,
+      paddingTop:
+        SPACING.xxxl,
 
     },
 
 
-    finalLogo: {
+    title: {
 
-      width:
-        200,
+      fontFamily:
+        FONTS.serif,
 
-      height:
-        200,
+      fontSize:
+        34,
+
+      color:
+        COLORS.brand,
+
+      marginTop:
+        SPACING.lg,
+
+    },
+
+
+    subtitle: {
+
+      fontFamily:
+        FONTS.sans,
+
+      color:
+        COLORS.onSurface,
+
+      fontSize:
+        14,
+
+      marginTop:
+        4,
+
+    },
+
+
+    body: {
+
+      flex: 1,
+
+      backgroundColor:
+        COLORS.surface,
+
+      marginTop:
+        -18,
+
+      borderTopLeftRadius:
+        28,
+
+      borderTopRightRadius:
+        28,
+
+      padding:
+        SPACING.xl,
+
+    },
+
+
+    welcome: {
+
+      fontFamily:
+        FONTS.serif,
+
+      fontSize:
+        28,
+
+      color:
+        COLORS.onSurface,
+
+      textAlign:
+        "center",
 
       marginBottom:
+        SPACING.xxl,
+
+    },
+
+
+    card: {
+
+      backgroundColor:
+        COLORS.surfaceSecondary,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
+
+      borderRadius:
+        RADIUS.lg,
+
+      padding:
+        SPACING.xl,
+
+      marginBottom:
+        SPACING.lg,
+
+      alignItems:
+        "center",
+
+    },
+
+
+    cardIcon: {
+
+      fontSize:
+        42,
+
+    },
+
+
+    cardTitle: {
+
+      fontFamily:
+        FONTS.serif,
+
+      fontSize:
+        24,
+
+      color:
+        COLORS.brand,
+
+      marginTop:
         12,
 
     },
 
 
-    finalTitle: {
-
-      color:
-        "#F2F2F2",
-
-      fontFamily:
-        FONTS.serif,
-
-      fontSize:
-        30,
-
-      letterSpacing:
-        2,
-
-    },
-
-
-    finalTownship: {
-
-      color:
-        COLORS.brand,
+    cardSub: {
 
       fontFamily:
         FONTS.sans,
 
-      fontSize:
-        18,
-
-      letterSpacing:
-        5,
+      color:
+        COLORS.muted,
 
       marginTop:
-        8,
-
-    },
-
-
-    goldLine: {
-
-      width:
-        110,
-
-      height:
-        1,
-
-      backgroundColor:
-        COLORS.brand,
-
-      marginVertical:
-        28,
-
-    },
-
-
-    finalWelcome: {
-
-      color:
-        COLORS.brand,
-
-      fontFamily:
-        FONTS.serif,
-
-      fontSize:
-        36,
-
-    },
-
-
-    finalSubtitle: {
-
-      color:
-        "#D8D8D8",
-
-      fontFamily:
-        FONTS.sans,
-
-      fontSize:
-        11,
-
-      letterSpacing:
-        2,
-
-      marginTop:
-        14,
+        4,
 
       textAlign:
         "center",
@@ -978,65 +1141,22 @@ const styles =
     },
 
 
-    enterButton: {
+    version: {
+
+      textAlign:
+        "center",
 
       marginTop:
-        55,
+        "auto",
 
-      borderWidth:
-        1,
-
-      borderColor:
-        COLORS.brand,
-
-      borderRadius:
-        28,
-
-      paddingVertical:
-        16,
-
-      paddingHorizontal:
-        42,
-
-      backgroundColor:
-        "rgba(212,175,55,0.12)",
-
-    },
-
-
-    enterButtonText: {
-
-      color:
-        COLORS.brand,
-
-      fontFamily:
-        FONTS.sans,
-
-      fontSize:
-        14,
-
-      letterSpacing:
-        2,
-
-      fontWeight:
-        "600",
-
-    },
-
-
-    finalHint: {
+      marginBottom:
+        SPACING.lg,
 
       color:
         COLORS.muted,
 
       fontFamily:
         FONTS.sans,
-
-      fontSize:
-        12,
-
-      marginTop:
-        18,
 
     },
 

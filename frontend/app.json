@@ -4,7 +4,7 @@
     "slug": "satrwa",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/splash-logo.png",
     "scheme": "satrwa",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -17,7 +17,7 @@
       "versionCode": 1,
       "usesCleartextTraffic": false,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/splash-logo.png",
         "backgroundColor": "#000000"
       },
       "permissions": [
@@ -32,7 +32,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/logo-satrwa.png"
     },
     "plugins": [
       "expo-router",
