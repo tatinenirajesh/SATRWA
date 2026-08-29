@@ -8,21 +8,27 @@
 
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.satrwa.in"
+      }
     },
 
     "preview": {
-    "distribution": "internal",
-    "env": {
-      "EXPO_PUBLIC_BACKEND_URL": "http://192.168.0.9:8001"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.satrwa.in"
+      },
+      "android": {
+        "buildType": "apk"
+      }
     },
-    "android": {
-      "buildType": "apk"
-    }
-  },
 
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.satrwa.in"
+      }
     }
 
   },
@@ -30,5 +36,4 @@
   "submit": {
     "production": {}
   }
-
 }
